@@ -1,6 +1,7 @@
 
 "use client";
 
+import { Suspense } from "react";
 import StaffLayout from "@/components/layouts/StaffLayout";
 import StaffGuard from "@/components/auth/StaffGuard";
 import { useEffect, useState } from "react";
@@ -9,6 +10,7 @@ import { db } from "@/lib/firebase/config";
 import { useAuth } from "@/lib/firebase/context";
 import { useRouter, useSearchParams } from "next/navigation";
 import { Save, ArrowRight } from "lucide-react";
+import { useMasterData } from "@/hooks/useMasterData";
 
 interface Product {
   id: string;
@@ -27,9 +29,7 @@ interface StockItem {
   toOrder: number;
 }
 
-import { useMasterData } from "@/hooks/useMasterData";
-
-export default function StockCheckPage() {
+function CheckContent() {
   const { userProfile } = useAuth();
   const { categories } = useMasterData();
   const router = useRouter();
@@ -265,112 +265,120 @@ export default function StockCheckPage() {
     : items.filter(i => i.product.category === filterCategory);
 
   return (
+    <div className="space-y-4 pb-20">
+        <div className="flex justify-between items-center">
+            <h2 className="text-xl font-bold text-gray-800">Daily Stock Check</h2>
+            {/* Removed the old Review Order button */}
+        </div>
+
+        {/* Filter */}
+        <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
+            <button
+                onClick={() => setFilterCategory("All")}
+                className={`px-4 py-1 rounded-full whitespace-nowrap text-sm ${filterCategory === "All" ? "bg-green-600 text-white" : "bg-gray-200 text-gray-700"}`}
+            >
+                ทั้งหมด
+            </button>
+            {categories.map(c => (
+                <button
+                    key={c}
+                    onClick={() => setFilterCategory(c)}
+                    className={`px-4 py-1 rounded-full whitespace-nowrap text-sm ${filterCategory === c ? "bg-green-600 text-white" : "bg-gray-200 text-gray-700"}`}
+                >
+                    {c}
+                </button>
+            ))}
+        </div>
+        <div className="flex justify-between items-center mb-4">
+    <h1 className="text-xl font-bold text-gray-900">เช็คสต๊อกวันนี้</h1>
+    <div className="text-sm text-gray-500">
+        {new Date().toLocaleDateString('th-TH')}
+    </div>
+  </div>
+
+  <div className="bg-white rounded-lg shadow overflow-hidden">
+    <div className="overflow-x-auto">
+    <table className="min-w-full divide-y divide-gray-200">
+      <thead className="bg-gray-50">
+        <tr>
+          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-1/3">สินค้า</th>
+          <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase w-20">ขั้นต่ำ</th>
+          <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase w-20">คงเหลือ</th>
+          <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase w-16">ต้องสั่ง</th>
+        </tr>
+      </thead>
+      <tbody className="bg-white divide-y divide-gray-200">
+        {filteredItems.map((item) => (
+          <tr key={item.productId} className={item.toOrder > 0 ? "bg-red-50" : ""}>
+            <td className="px-4 py-3">
+              <div className="font-medium text-gray-900">{item.product.name}</div>
+              <div className="text-xs text-gray-500">{item.product.unit} ({item.product.source})</div>
+            </td>
+            <td className="px-2 py-3 text-center">
+                <input 
+                    type="number" 
+                    className="w-16 border rounded text-center py-1 text-sm bg-gray-50 border-dashed border-gray-300 focus:bg-white focus:border-green-500 transition-colors"
+                    placeholder="-"
+                    value={item.minStock || ""}
+                    min={0.1}
+                    onChange={(e) => handleMinStockChange(item.productId, e.target.value)}
+                    onBlur={() => saveMinStock(item)}
+                />
+            </td>
+            <td className="px-2 py-3 text-center">
+                <input 
+                    type="number" 
+                    className="w-16 border rounded text-center py-1 text-sm border-gray-300 focus:ring-2 focus:ring-green-500"
+                    placeholder="0"
+                    value={item.currentStock}
+                    onChange={(e) => handleCurrentChange(item.productId, e.target.value)}
+                />
+            </td>
+            <td className="px-2 py-3 text-center">
+                {item.toOrder > 0 ? (
+                    <span className="font-bold text-red-600">{Math.ceil(item.toOrder)}</span>
+                ) : (
+                    <span className="text-gray-300">-</span>
+                )}
+            </td>
+          </tr>
+        ))}
+      </tbody>
+    </table>
+    </div>
+    {items.length === 0 && !loading && (
+        <div className="p-8 text-center text-gray-400">
+            <p>ไม่พบรายการสินค้า</p>
+            <p className="text-sm mt-2">กรุณาตรวจสอบว่ามีสินค้าในระบบและกำหนดสาขาแล้ว</p>
+        </div>
+    )}
+  </div>
+
+  <div className="h-20"></div> {/* Spacer */}
+
+  <div className="fixed bottom-16 left-0 w-full bg-white border-t p-4 flex justify-between items-center shadow-lg">
+      <div className="text-sm">
+          <span className="font-bold text-red-600">{items.filter(i => i.toOrder > 0).length}</span> รายการที่ต้องสั่ง
+      </div>
+      <button 
+        onClick={handleSubmit}
+        disabled={submitting}
+        className="bg-green-600 text-white font-bold py-2 px-6 rounded-full shadow-md hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
+      >
+         {submitting ? "กำลังบันทึก..." : "สรุปรายการสั่งซื้อ"}
+      </button>
+  </div>
+    </div>
+  );
+}
+
+export default function StockCheckPage() {
+  return (
     <StaffGuard>
         <StaffLayout>
-            <div className="space-y-4 pb-20">
-                <div className="flex justify-between items-center">
-                    <h2 className="text-xl font-bold text-gray-800">Daily Stock Check</h2>
-                    {/* Removed the old Review Order button */}
-                </div>
-
-                {/* Filter */}
-                <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                    <button
-                        onClick={() => setFilterCategory("All")}
-                        className={`px-4 py-1 rounded-full whitespace-nowrap text-sm ${filterCategory === "All" ? "bg-green-600 text-white" : "bg-gray-200 text-gray-700"}`}
-                    >
-                        ทั้งหมด
-                    </button>
-                    {categories.map(c => (
-                        <button
-                            key={c}
-                            onClick={() => setFilterCategory(c)}
-                            className={`px-4 py-1 rounded-full whitespace-nowrap text-sm ${filterCategory === c ? "bg-green-600 text-white" : "bg-gray-200 text-gray-700"}`}
-                        >
-                            {c}
-                        </button>
-                    ))}
-                </div>
-                <div className="flex justify-between items-center mb-4">
-            <h1 className="text-xl font-bold text-gray-900">เช็คสต๊อกวันนี้</h1>
-            <div className="text-sm text-gray-500">
-                {new Date().toLocaleDateString('th-TH')}
-            </div>
-          </div>
-
-          <div className="bg-white rounded-lg shadow overflow-hidden">
-            <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
-                <tr>
-                  <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-1/3">สินค้า</th>
-                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase w-20">ขั้นต่ำ</th>
-                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase w-20">คงเหลือ</th>
-                  <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase w-16">ต้องสั่ง</th>
-                </tr>
-              </thead>
-              <tbody className="bg-white divide-y divide-gray-200">
-                {filteredItems.map((item) => (
-                  <tr key={item.productId} className={item.toOrder > 0 ? "bg-red-50" : ""}>
-                    <td className="px-4 py-3">
-                      <div className="font-medium text-gray-900">{item.product.name}</div>
-                      <div className="text-xs text-gray-500">{item.product.unit} ({item.product.source})</div>
-                    </td>
-                    <td className="px-2 py-3 text-center">
-                        <input 
-                            type="number" 
-                            className="w-16 border rounded text-center py-1 text-sm bg-gray-50 border-dashed border-gray-300 focus:bg-white focus:border-green-500 transition-colors"
-                            placeholder="-"
-                            value={item.minStock || ""}
-                            min={0.1}
-                            onChange={(e) => handleMinStockChange(item.productId, e.target.value)}
-                            onBlur={() => saveMinStock(item)}
-                        />
-                    </td>
-                    <td className="px-2 py-3 text-center">
-                        <input 
-                            type="number" 
-                            className="w-16 border rounded text-center py-1 text-sm border-gray-300 focus:ring-2 focus:ring-green-500"
-                            placeholder="0"
-                            value={item.currentStock}
-                            onChange={(e) => handleCurrentChange(item.productId, e.target.value)}
-                        />
-                    </td>
-                    <td className="px-2 py-3 text-center">
-                        {item.toOrder > 0 ? (
-                            <span className="font-bold text-red-600">{Math.ceil(item.toOrder)}</span>
-                        ) : (
-                            <span className="text-gray-300">-</span>
-                        )}
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </table>
-            </div>
-            {items.length === 0 && !loading && (
-                <div className="p-8 text-center text-gray-400">
-                    <p>ไม่พบรายการสินค้า</p>
-                    <p className="text-sm mt-2">กรุณาตรวจสอบว่ามีสินค้าในระบบและกำหนดสาขาแล้ว</p>
-                </div>
-            )}
-          </div>
-
-          <div className="h-20"></div> {/* Spacer */}
-
-          <div className="fixed bottom-16 left-0 w-full bg-white border-t p-4 flex justify-between items-center shadow-lg">
-              <div className="text-sm">
-                  <span className="font-bold text-red-600">{items.filter(i => i.toOrder > 0).length}</span> รายการที่ต้องสั่ง
-              </div>
-              <button 
-                onClick={handleSubmit}
-                disabled={submitting}
-                className="bg-green-600 text-white font-bold py-2 px-6 rounded-full shadow-md hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
-              >
-                 {submitting ? "กำลังบันทึก..." : "สรุปรายการสั่งซื้อ"}
-              </button>
-          </div>
-            </div>
+           <Suspense fallback={<div className="p-4 text-center">กำลังโหลด...</div>}>
+              <CheckContent />
+           </Suspense>
         </StaffLayout>
     </StaffGuard>
   );
