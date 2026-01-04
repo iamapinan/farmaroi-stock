@@ -54,7 +54,7 @@ export default function StaffLayout({ children }: { children: React.ReactNode })
   ];
 
   return (
-    <div className="flex flex-col h-screen bg-gray-50 max-sm:max-w-xs md:max-w-full">
+    <div className="flex flex-col h-screen bg-gray-50 max-w-full">
       {/* Mobile Header */}
       <header className="bg-white shadow-sm px-4 py-3 flex justify-between items-center sticky top-0 z-10">
         <div>

@@ -9,7 +9,7 @@ import { collection, getDocs, doc, setDoc, getDoc, query, where, Timestamp, addD
 import { db } from "@/lib/firebase/config";
 import { useAuth } from "@/lib/firebase/context";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Save, ArrowRight } from "lucide-react";
+import { Save, ArrowRight, Plus, Minus, Search } from "lucide-react";
 import { useMasterData } from "@/hooks/useMasterData";
 
 interface Product {
@@ -40,6 +40,7 @@ function CheckContent() {
   const [loading, setLoading] = useState(true);
   const [submitting, setSubmitting] = useState(false);
   const [filterCategory, setFilterCategory] = useState("All");
+  const [search, setSearch] = useState(""); // Add search state
   const [activeBranchId, setActiveBranchId] = useState<string | null>(null);
 
   useEffect(() => {
@@ -132,7 +133,7 @@ function CheckContent() {
         const currentQty = stockMap[p.id];
         // If we have a record, show it. If undefined, leave empty to prompt check?
         // User asked to "show latest", so we show what we have.
-        const currentStockStr = currentQty !== undefined ? currentQty.toString() : "";
+        const currentStockStr = currentQty !== undefined ? currentQty.toString() : "0";
         
         // Calculate initial toOrder based on this pre-filled stock?
         // If we pre-fill, we should probably calc toOrder too if it's < minStock.
@@ -160,19 +161,37 @@ function CheckContent() {
   };
 
   const handleMinStockChange = (productId: string, val: string) => {
-    const num = parseFloat(val) || 0;
-    setItems(items.map(i => i.productId === productId ? { ...i, minStock: num } : i));
+    // If val is empty, we set to 0 to comply with "show 0". 
+    // However, to allow typing, maybe we need to treat it carefully.
+    // But since user asked specifically for "if none, show 0", defaulting to 0 is main goal.
+    const num = val === "" ? 0 : parseFloat(val);
+    setItems(items.map(i => i.productId === productId ? { ...i, minStock: isNaN(num) ? 0 : num } : i));
   };
 
   const handleCurrentChange = (productId: string, val: string) => {
     setItems(items.map(i => {
       if (i.productId === productId) {
-        const current = parseFloat(val) || 0;
-        const toOrder = Math.max(0, i.minStock - current);
+        // Allow empty string for backspace
+        if (val === "") return { ...i, currentStock: "", toOrder: i.minStock };
+
+        const current = parseFloat(val);
+        const toOrder = Math.max(0, i.minStock - (isNaN(current) ? 0 : current));
         return { ...i, currentStock: val, toOrder };
       }
       return i;
     }));
+  };
+
+  const adjustStock = (productId: string, delta: number) => {
+     setItems(items.map(i => {
+         if (i.productId === productId) {
+             const currentVal = parseFloat(i.currentStock) || 0;
+             const newVal = Math.max(0, currentVal + delta);
+             const toOrder = Math.max(0, i.minStock - newVal);
+             return { ...i, currentStock: newVal.toString(), toOrder };
+         }
+         return i;
+     }));
   };
 
   const saveMinStock = async (item: StockItem) => {
@@ -260,34 +279,50 @@ function CheckContent() {
     }
   };
 
-  const filteredItems = filterCategory === "All" 
-    ? items 
-    : items.filter(i => i.product.category === filterCategory);
+  const filteredItems = items.filter(item => {
+    const matchesCategory = filterCategory === "All" || item.product.category === filterCategory;
+    const matchesSearch = item.product.name.toLowerCase().includes(search.toLowerCase());
+    return matchesCategory && matchesSearch;
+  });
 
   return (
-    <div className="space-y-4 pb-20">
-        <div className="flex justify-between items-center">
-            <h2 className="text-xl font-bold text-gray-800">Daily Stock Check</h2>
-            {/* Removed the old Review Order button */}
-        </div>
+    <div className="space-y-4 pb-20 relative">
+        <div className="sticky top-[-20px] bg-gray-50 pt-2 pb-4 z-20 space-y-4 -mx-4 px-4 border-b border-gray-200 shadow-sm">
+            <div className="flex justify-between items-center">
+                <h2 className="text-xl font-bold text-gray-800">Daily Stock Check</h2>
+            </div>
 
-        {/* Filter */}
-        <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-            <button
-                onClick={() => setFilterCategory("All")}
-                className={`px-4 py-1 rounded-full whitespace-nowrap text-sm ${filterCategory === "All" ? "bg-green-600 text-white" : "bg-gray-200 text-gray-700"}`}
-            >
-                ทั้งหมด
-            </button>
-            {categories.map(c => (
+
+            {/* Search Input */}
+            <div className="relative">
+                <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
+                <input
+                    type="text"
+                    placeholder="ค้นหาสินค้า..."
+                    value={search}
+                    onChange={(e) => setSearch(e.target.value)}
+                    className="pl-10 w-full border border-gray-300 rounded-lg py-2 focus:ring-green-500 focus:border-green-500 shadow-sm"
+                />
+            </div>
+
+            {/* Filter */}
+            <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
                 <button
-                    key={c}
-                    onClick={() => setFilterCategory(c)}
-                    className={`px-4 py-1 rounded-full whitespace-nowrap text-sm ${filterCategory === c ? "bg-green-600 text-white" : "bg-gray-200 text-gray-700"}`}
+                    onClick={() => setFilterCategory("All")}
+                    className={`px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-colors ${filterCategory === "All" ? "bg-green-600 text-white shadow-md" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"}`}
                 >
-                    {c}
+                    ทั้งหมด
                 </button>
-            ))}
+                {categories.map(c => (
+                    <button
+                        key={c}
+                        onClick={() => setFilterCategory(c)}
+                        className={`px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-colors ${filterCategory === c ? "bg-green-600 text-white shadow-md" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+                    >
+                        {c}
+                    </button>
+                ))}
+            </div>
         </div>
         <div className="flex justify-between items-center mb-4">
     <h1 className="text-xl font-bold text-gray-900">เช็คสต๊อกวันนี้</h1>
@@ -296,60 +331,73 @@ function CheckContent() {
     </div>
   </div>
 
-  <div className="bg-white rounded-lg shadow overflow-hidden">
-    <div className="overflow-x-auto">
-    <table className="min-w-full divide-y divide-gray-200">
-      <thead className="bg-gray-50">
-        <tr>
-          <th className="px-4 py-3 text-left text-xs font-medium text-gray-500 uppercase w-1/3">สินค้า</th>
-          <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase w-20">ขั้นต่ำ</th>
-          <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase w-20">คงเหลือ</th>
-          <th className="px-2 py-3 text-center text-xs font-medium text-gray-500 uppercase w-16">ต้องสั่ง</th>
-        </tr>
-      </thead>
-      <tbody className="bg-white divide-y divide-gray-200">
-        {filteredItems.map((item) => (
-          <tr key={item.productId} className={item.toOrder > 0 ? "bg-red-50" : ""}>
-            <td className="px-4 py-3">
-              <div className="font-medium text-gray-900">{item.product.name}</div>
-              <div className="text-xs text-gray-500">{item.product.unit} ({item.product.source})</div>
-            </td>
-            <td className="px-2 py-3 text-center">
-                <input 
-                    type="number" 
-                    className="w-16 border rounded text-center py-1 text-sm bg-gray-50 border-dashed border-gray-300 focus:bg-white focus:border-green-500 transition-colors"
-                    placeholder="-"
-                    value={item.minStock || ""}
-                    min={0.1}
-                    onChange={(e) => handleMinStockChange(item.productId, e.target.value)}
-                    onBlur={() => saveMinStock(item)}
-                />
-            </td>
-            <td className="px-2 py-3 text-center">
-                <input 
-                    type="number" 
-                    className="w-16 border rounded text-center py-1 text-sm border-gray-300 focus:ring-2 focus:ring-green-500"
-                    placeholder="0"
-                    value={item.currentStock}
-                    onChange={(e) => handleCurrentChange(item.productId, e.target.value)}
-                />
-            </td>
-            <td className="px-2 py-3 text-center">
-                {item.toOrder > 0 ? (
-                    <span className="font-bold text-red-600">{Math.ceil(item.toOrder)}</span>
-                ) : (
-                    <span className="text-gray-300">-</span>
-                )}
-            </td>
-          </tr>
-        ))}
-      </tbody>
-    </table>
-    </div>
-    {items.length === 0 && !loading && (
-        <div className="p-8 text-center text-gray-400">
-            <p>ไม่พบรายการสินค้า</p>
-            <p className="text-sm mt-2">กรุณาตรวจสอบว่ามีสินค้าในระบบและกำหนดสาขาแล้ว</p>
+  <div className="space-y-4">
+    {filteredItems.map((item) => (
+      <div key={item.productId} className={`bg-white rounded-xl shadow-sm border border-gray-100 p-4 ${item.toOrder > 0 ? "ring-1 ring-red-100 bg-red-50/30" : ""}`}>
+          {/* Header: Name & Info */}
+          <div className="flex justify-between items-start mb-3">
+              <div>
+                  <h3 className="font-bold text-gray-900 text-lg leading-tight">{item.product.name}</h3>
+                  <p className="text-sm text-gray-500 mt-1">{item.product.category} • {item.product.unit} <span className="text-gray-400">({item.product.source})</span></p>
+              </div>
+              {item.toOrder > 0 && (
+                  <div className="bg-red-100 text-red-700 px-2 py-1 rounded text-xs whitespace-nowrap">
+                      ขั้นต่ำ {Math.ceil(item.toOrder)}
+                  </div>
+              )}
+          </div>
+
+          {/* Controls Row */}
+          <div className="flex items-end gap-3">
+              
+              {/* Main Stock Input */}
+              <div className="flex-1">
+                  <label className="text-xs font-medium text-gray-500 mb-1 block">ของที่มีอยู่ (Current)</label>
+                  <div className="flex items-center gap-2">
+                       <button 
+                         onClick={() => adjustStock(item.productId, -1)}
+                         className="w-10 h-10 rounded-lg border border-gray-200 bg-gray-50 flex items-center justify-center text-gray-600 active:bg-gray-200 active:scale-95 transition-all"
+                       >
+                           <Minus className="w-5 h-5" />
+                       </button>
+                       <input 
+                           type="number"
+                           inputMode="decimal"
+                           className="flex-1 h-10 text-center text-lg font-semibold border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-green-500"
+                           value={item.currentStock}
+                           onChange={(e) => handleCurrentChange(item.productId, e.target.value)}
+                           onFocus={(e) => e.target.select()} // Select all on tap
+                           placeholder="0"
+                       />
+                       <button 
+                         onClick={() => adjustStock(item.productId, 1)}
+                         className="w-10 h-10 rounded-lg border border-green-200 bg-green-50 flex items-center justify-center text-green-700 active:bg-green-100 active:scale-95 transition-all"
+                       >
+                           <Plus className="w-5 h-5" />
+                       </button>
+                  </div>
+              </div>
+
+              {/* Min Stock (Secondary) */}
+              <div className="w-20">
+                   <label className="text-[10px] font-medium text-gray-400 mb-1 block text-center">ขั้นต่ำ (Min)</label>
+                   <input
+                       type="number"
+                       className="w-full h-10 text-center text-sm bg-gray-50 border border-dashed border-gray-300 rounded-lg text-gray-500 focus:bg-white focus:text-gray-900"
+                       value={item.minStock}
+                       onChange={(e) => handleMinStockChange(item.productId, e.target.value)}
+                       onBlur={() => saveMinStock(item)}
+                   />
+              </div>
+
+          </div>
+      </div>
+    ))}
+
+    {filteredItems.length === 0 && !loading && (
+        <div className="p-10 text-center text-gray-400">
+            <Search className="w-12 h-12 mx-auto mb-2 opacity-20" />
+            <p>ไม่พบรายการสินค้าในหมวดนี้</p>
         </div>
     )}
   </div>

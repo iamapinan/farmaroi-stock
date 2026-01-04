@@ -8,7 +8,7 @@ import { collection, getDocs, addDoc, Timestamp, doc, setDoc, increment } from "
 import { db } from "@/lib/firebase/config";
 import { useAuth } from "@/lib/firebase/context";
 import { useMasterData } from "@/hooks/useMasterData";
-import { Search, Save, History, Truck } from "lucide-react";
+import { Search, Save, History, Truck, Plus, X } from "lucide-react";
 
 interface Product {
   id: string;
@@ -33,6 +33,17 @@ export default function StockInPage() {
   const [submitting, setSubmitting] = useState(false);
   const [search, setSearch] = useState("");
   const [filterCategory, setFilterCategory] = useState("All");
+
+  // Custom Product State
+  const [showCustomProductModal, setShowCustomProductModal] = useState(false);
+  const [customProductForm, setCustomProductForm] = useState({
+    name: "",
+    category: "",
+    unit: "",
+    minStock: "",
+    currentStock: "",
+    source: "Custom"
+  });
 
   const [currentStocks, setCurrentStocks] = useState<Record<string, number>>({});
   
@@ -86,6 +97,44 @@ export default function StockInPage() {
 
   const handleUpdateItem = (productId: string, field: 'qty' | 'price', value: string) => {
     setItems(items.map(i => i.productId === productId ? { ...i, [field]: value } : i));
+  };
+
+  const handleSaveCustomProduct = async () => {
+    if (!customProductForm.name || !customProductForm.category || !customProductForm.unit) {
+        alert("กรุณากรอกข้อมูลให้ครบถ้วน");
+        return;
+    }
+    setSubmitting(true);
+    try {
+        const newProdData = {
+            name: customProductForm.name,
+            category: customProductForm.category,
+            unit: customProductForm.unit,
+            source: customProductForm.source,
+            minStock: customProductForm.minStock ? Number(customProductForm.minStock) : 0,
+            createdAt: Timestamp.now()
+        };
+        const docRef = await addDoc(collection(db, "products"), newProdData);
+        const newProduct: Product = { id: docRef.id, ...newProdData };
+        
+        // Add to local product list + Add to items
+        setProducts(prev => [...prev, newProduct]);
+        handleAddItem(newProduct);
+        
+        // If current stock was provided, we should probably initialize it?
+        // But this is "Stock In" page, so maybe we just let them enter the qty in the main form.
+        // We'll reset form and close modal.
+        setShowCustomProductModal(false);
+        setCustomProductForm({
+            name: "", category: "", unit: "", minStock: "", currentStock: "", source: "Custom"
+        });
+        
+    } catch (e) {
+        console.error("Error creating custom product:", e);
+        alert("เกิดข้อผิดพลาดในการเพิ่มสินค้า");
+    } finally {
+        setSubmitting(false);
+    }
   };
 
 
@@ -155,6 +204,21 @@ export default function StockInPage() {
           <div className="flex items-center gap-2 mb-4">
             <Truck className="w-6 h-6 text-green-600" />
             <h1 className="text-2xl font-bold text-gray-900">รับสินค้าเข้า (Stock In)</h1>
+          </div>
+          
+          <div className="flex justify-end">
+                <button 
+                    onClick={() => {
+                        setCustomProductForm({
+                            name: "", category: categories[0] || "", unit: "ขวด", minStock: "", currentStock: "", source: "Custom"
+                        });
+                        setShowCustomProductModal(true);
+                    }}
+                    className="bg-purple-600 text-white px-4 py-2 rounded-lg shadow hover:bg-purple-700 flex items-center text-sm font-bold"
+                >
+                    <Plus className="w-4 h-4 mr-2" />
+                    เพิ่มสินค้าใหม่ (Custom)
+                </button>
           </div>
 
           {/* Search Section */}
@@ -250,8 +314,71 @@ export default function StockInPage() {
               </button>
           </div>
 
+
+
         </div>
+
+      {/* Custom Product Modal */}
+      {showCustomProductModal && (
+          <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50 p-4 print:hidden">
+              <div className="bg-white rounded-lg shadow-xl w-full max-w-lg p-6">
+                  <div className="flex justify-between items-center mb-4">
+                      <h3 className="font-bold text-lg">เพิ่มสินค้าใหม่ (Custom)</h3>
+                      <button onClick={() => setShowCustomProductModal(false)}><X className="text-gray-400" /></button>
+                  </div>
+                  <div className="space-y-4">
+                      <div>
+                          <label className="block text-sm font-medium">ชื่อสินค้า</label>
+                          <input 
+                             className="w-full border rounded px-3 py-2"
+                             value={customProductForm.name}
+                             onChange={e => setCustomProductForm({...customProductForm, name: e.target.value})}
+                          />
+                      </div>
+                      <div className="grid grid-cols-2 gap-4">
+                          <div>
+                             <label className="block text-sm font-medium">หมวดหมู่</label>
+                             <select 
+                                 className="w-full border rounded px-3 py-2"
+                                 value={customProductForm.category}
+                                 onChange={e => setCustomProductForm({...customProductForm, category: e.target.value})}
+                             >
+                                 <option value="">--เลือก--</option>
+                                 {categories.map(c => <option key={c} value={c}>{c}</option>)}
+                             </select>
+                          </div>
+                          <div>
+                             <label className="block text-sm font-medium">หน่วย</label>
+                             <input 
+                                 className="w-full border rounded px-3 py-2"
+                                 value={customProductForm.unit}
+                                 onChange={e => setCustomProductForm({...customProductForm, unit: e.target.value})}
+                                 placeholder="e.g. ขวด, แพ็ค"
+                             />
+                          </div>
+                      </div>
+                      <div>
+                            <label className="block text-sm font-medium">Min Stock (แจ้งเตือนเมื่อต่ำกว่า)</label>
+                             <input 
+                                type="number"
+                                className="w-full border rounded px-3 py-2"
+                                value={customProductForm.minStock}
+                                onChange={e => setCustomProductForm({...customProductForm, minStock: e.target.value})}
+                                placeholder="0"
+                            />
+                      </div>
+
+                      <div className="pt-4 flex justify-end gap-2">
+                          <button onClick={() => setShowCustomProductModal(false)} className="px-4 py-2 border rounded">ยกเลิก</button>
+                          <button onClick={handleSaveCustomProduct} className="px-4 py-2 bg-purple-600 text-white rounded hover:bg-purple-700">บันทึกและเพิ่มรายการ</button>
+                      </div>
+                  </div>
+              </div>
+          </div>
+      )}
+
       </StaffLayout>
     </StaffGuard>
   );
 }
+

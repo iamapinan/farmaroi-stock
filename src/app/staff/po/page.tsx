@@ -3,11 +3,11 @@
 import StaffLayout from "@/components/layouts/StaffLayout";
 import StaffGuard from "@/components/auth/StaffGuard";
 import { useEffect, useState } from "react";
-import { collection, query, where, getDocs, orderBy } from "firebase/firestore";
+import { collection, query, where, getDocs, orderBy, deleteDoc, doc } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { useAuth } from "@/lib/firebase/context";
 import Link from "next/link";
-import { Calendar as CalendarIcon, ChevronRight, List, ChevronLeft } from "lucide-react";
+import { Calendar as CalendarIcon, ChevronRight, List, ChevronLeft, Trash2 } from "lucide-react";
 import { 
   startOfMonth, 
   endOfMonth, 
@@ -109,6 +109,19 @@ export default function POListPage() {
         ? getChecksForDay(selectedDate)
         : checks.filter(c => isSameMonth(c.date.toDate ? c.date.toDate() : new Date(c.date), currentMonth));
 
+  const handleDelete = async (e: React.MouseEvent, id: string) => {
+    e.preventDefault(); // Prevent navigation
+    if (!confirm("คุณแน่ใจว่าต้องการลบประวัติการสั่งซื้อนี้? การดำเนินการนี้ไม่สามารถยกเลิกได้")) return;
+    
+    try {
+        await deleteDoc(doc(db, "daily_checks", id));
+        setChecks(prev => prev.filter(c => c.id !== id));
+    } catch (error) {
+        console.error("Error deleting check:", error);
+        alert("ลบไม่สำเร็จ");
+    }
+  };
+
   return (
     <StaffGuard>
         <StaffLayout>
@@ -208,11 +221,15 @@ export default function POListPage() {
                                     <Link 
                                         key={check.id} 
                                         href={`/staff/po/${check.id}`}
-                                        className="block bg-white p-4 rounded-lg shadow-sm border border-gray-100 hover:border-green-200 transition-colors"
+                                        className={`relative block bg-white p-4 rounded-lg shadow-sm border-l-4 transition-colors ${
+                                            check.status === 'completed' 
+                                            ? 'border-l-green-500 hover:border-green-200' 
+                                            : 'border-l-orange-500 hover:border-orange-200'
+                                        } border-y border-r border-gray-100`}
                                     >
                                         <div className="flex justify-between items-center">
                                             <div className="flex items-center gap-3">
-                                                <div className="bg-green-100 p-2 rounded-lg text-green-700">
+                                                <div className={`p-2 rounded-lg ${check.status === 'completed' ? 'bg-green-100 text-green-700' : 'bg-orange-100 text-orange-700'}`}>
                                                     <CalendarIcon className="w-5 h-5" />
                                                 </div>
                                                 <div>
@@ -222,6 +239,17 @@ export default function POListPage() {
                                             </div>
                                             <ChevronRight className="text-gray-400 w-5 h-5" />
                                         </div>
+                                        {userProfile?.role === 'admin' && (
+                                            <div className="absolute top-4 right-12 z-20">
+                                                 <button 
+                                                    onClick={(e) => handleDelete(e, check.id)}
+                                                    className="p-1 text-gray-400 hover:text-red-500 hover:bg-red-50 rounded"
+                                                    title="ลบรายการ"
+                                                 >
+                                                    <Trash2 className="w-5 h-5" />
+                                                 </button>
+                                            </div>
+                                        )}
                                     </Link>
                                 ))}
                             </div>
