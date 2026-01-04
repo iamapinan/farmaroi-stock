@@ -4,13 +4,15 @@ import { collection, getDocs, doc, setDoc, increment, getDoc, updateDoc, addDoc,
 import { db } from "@/lib/firebase/config";
 import { useAuth } from "@/lib/firebase/context";
 import { useParams, useRouter } from "next/navigation";
-import { ChevronLeft, Printer, Edit, PackageCheck, CheckCircle, X, Plus, Save } from "lucide-react";
+import { ChevronLeft, Printer, Edit, PackageCheck, CheckCircle, X, Plus, Save, Bluetooth } from "lucide-react";
 import { format } from "date-fns";
 import Link from "next/link";
 import { useState, useEffect } from "react";
 import StaffLayout from "@/components/layouts/StaffLayout";
 import StaffGuard from "@/components/auth/StaffGuard";
 import { useMasterData } from "@/hooks/useMasterData";
+import { useBluetoothPrinter } from "@/hooks/useBluetoothPrinter";
+import { PRINTER_COMMANDS, encodeToThai, concatBuffers } from "@/utils/printer-commands";
 
 interface DOItem {
   productId: string;
@@ -29,6 +31,7 @@ export default function PODetailPage() {
   const [loading, setLoading] = useState(true);
   const [branchName, setBranchName] = useState("");
   const [processing, setProcessing] = useState(false);
+  const { connect, print, isConnected, isPrinting, error: btError } = useBluetoothPrinter();
   
   // Modal State
   const [showReceiveModal, setShowReceiveModal] = useState(false);
@@ -241,6 +244,136 @@ export default function PODetailPage() {
       window.print();
   };
 
+  const handleBluetoothPrintOrder = async () => {
+    if (!data) return;
+    
+    // Auto-connect if not connected
+    if (!isConnected) {
+        const connected = await connect();
+        if (!connected) return;
+    }
+
+    try {
+        const cmds: (number[] | Uint8Array)[] = [
+            PRINTER_COMMANDS.INIT,
+            PRINTER_COMMANDS.ALIGN_CENTER,
+            PRINTER_COMMANDS.BOLD_ON,
+            encodeToThai("Farm Aroi"), PRINTER_COMMANDS.LF,
+            PRINTER_COMMANDS.BOLD_OFF,
+            PRINTER_COMMANDS.TEXT_SIZE_NORMAL,
+            encodeToThai("ใบสั่งซื้อของรายวัน"), PRINTER_COMMANDS.LF,
+            encodeToThai(`สาขา: ${branchName}`), PRINTER_COMMANDS.LF,
+            encodeToThai(`${format(data.date?.toDate ? data.date.toDate() : new Date(), "dd/MM/yyyy HH:mm")}`), PRINTER_COMMANDS.LF,
+             encodeToThai(`User: ${data.user?.split('@')[0]}`), PRINTER_COMMANDS.LF,
+            PRINTER_COMMANDS.LF,
+            PRINTER_COMMANDS.ALIGN_LEFT
+        ];
+
+        // Group items logic reused from render
+        const grouped = data.items.reduce((acc: any, item: any) => {
+            const source = item.source || item.productSource || 'General'; 
+            if (!acc[source]) acc[source] = [];
+            acc[source].push(item);
+            return acc;
+        }, {});
+
+        Object.entries(grouped).forEach(([source, items]: [string, any]) => {
+             cmds.push(
+                 PRINTER_COMMANDS.BOLD_ON,
+                 encodeToThai(`--- ${source} ---`), PRINTER_COMMANDS.LF,
+                 PRINTER_COMMANDS.BOLD_OFF
+             );
+             
+             items.forEach((item: any) => {
+                 // Format: [ ] ItemName ... Qty Unit
+                 cmds.push(encodeToThai(`[ ] ${item.productName}`));
+                 cmds.push(PRINTER_COMMANDS.LF);
+                 
+                 // Indent quantity
+                 cmds.push(encodeToThai(`    x ${item.toOrder} ${item.unit}`));
+                 cmds.push(PRINTER_COMMANDS.LF);
+             });
+             cmds.push(PRINTER_COMMANDS.LF);
+        });
+
+        cmds.push(
+            PRINTER_COMMANDS.LF,
+            PRINTER_COMMANDS.LF,
+            PRINTER_COMMANDS.LF // Feed
+        );
+
+        await print(concatBuffers(cmds));
+
+    } catch (e) {
+        console.error("Print failed", e);
+        alert("พิมพ์ไม่สำเร็จ: " + e);
+    }
+  };
+
+
+  const handleBluetoothPrintStockIn = async () => {
+      if (!summaryData) return;
+
+      if (!isConnected) {
+          const connected = await connect();
+          if (!connected) return;
+      }
+
+      try {
+          const cmds: (number[] | Uint8Array)[] = [
+              PRINTER_COMMANDS.INIT,
+              PRINTER_COMMANDS.ALIGN_CENTER,
+              PRINTER_COMMANDS.BOLD_ON,
+              encodeToThai("Farm Aroi"), PRINTER_COMMANDS.LF,
+              PRINTER_COMMANDS.BOLD_OFF,
+              encodeToThai("ใบรับสินค้าเข้า (Stock In)"), PRINTER_COMMANDS.LF,
+              encodeToThai(`สาขา ${summaryData.branchName}`), PRINTER_COMMANDS.LF,
+              encodeToThai(`${format(new Date(), "dd/MM/yyyy HH:mm")}`), PRINTER_COMMANDS.LF,
+              encodeToThai(`Ref: ${id}`), PRINTER_COMMANDS.LF,
+              PRINTER_COMMANDS.LF,
+              PRINTER_COMMANDS.ALIGN_LEFT
+          ];
+
+          // Items Table Header
+          // Simple layout for thermal printer
+          // Item                 Total
+          
+          summaryData.items.forEach((item: any) => {
+             cmds.push(encodeToThai(`${item.productName}`));
+             cmds.push(PRINTER_COMMANDS.LF);
+             
+             // Qty x Price = Total
+             const line2 = `${item.qty} ${item.unit} x ${item.price} = ${(item.qty * item.price).toLocaleString()}`;
+             cmds.push(encodeToThai(`  ${line2}`));
+             cmds.push(PRINTER_COMMANDS.LF);
+          });
+          
+          cmds.push(PRINTER_COMMANDS.LF);
+          cmds.push(PRINTER_COMMANDS.ALIGN_RIGHT);
+          cmds.push(
+              PRINTER_COMMANDS.BOLD_ON,
+              encodeToThai(`รวมสุทธิ: ${summaryData.totalCost.toLocaleString()} บ.`),
+              PRINTER_COMMANDS.BOLD_OFF,
+              PRINTER_COMMANDS.LF
+          );
+
+          cmds.push(
+              PRINTER_COMMANDS.LF,
+              PRINTER_COMMANDS.LF,
+              PRINTER_COMMANDS.ALIGN_CENTER,
+              encodeToThai("................................"), PRINTER_COMMANDS.LF,
+              encodeToThai("ผู้รับสินค้า"), PRINTER_COMMANDS.LF,
+              PRINTER_COMMANDS.LF,
+              PRINTER_COMMANDS.LF
+          );
+
+           await print(concatBuffers(cmds));
+
+      } catch (e) {
+          console.error("Stock in print failed", e);
+      }
+  };
+
 
   if (loading) return <div className="p-8 text-center">Loading...</div>;
   if (!data) return <div className="p-8 text-center">Not found</div>;
@@ -299,7 +432,15 @@ export default function PODetailPage() {
                                     className="bg-blue-600 text-white px-4 py-2 rounded-lg flex items-center shadow hover:bg-blue-700"
                                 >
                                     <Printer className="w-4 h-4 mr-2" />
-                                    พิมพ์
+                                    พิมพ์ (A4)
+                                </button>
+                                <button
+                                    onClick={handleBluetoothPrintOrder}
+                                    disabled={isPrinting}
+                                    className="bg-indigo-600 text-white px-4 py-2 rounded-lg flex items-center shadow hover:bg-indigo-700 disabled:opacity-50"
+                                >
+                                    <Bluetooth className="w-4 h-4 mr-2" />
+                                    {isPrinting ? "กำลังส่ง..." : "พิมพ์ใบเสร็จ"}
                                 </button>
                             </div>
                         </div>
@@ -324,32 +465,87 @@ export default function PODetailPage() {
             </StaffLayout>
         </div>
 
-        {/* Print Layout */}
-        <div className="hidden print:block p-2 text-black bg-white" style={{ maxWidth: '58mm', width: '100%', margin: '0 auto', fontSize: '12px', fontFamily: 'monospace' }}>
-            <div className="text-center mb-4 border-b pb-2 border-black">
-                <h1 className="font-bold text-lg">Farm Aroi</h1>
-                <p className="text-sm">ใบสั่งซื้อของรายวัน</p>
-                <p className="text-xs">สาขา: {branchName}</p>
-                <p className="text-xs">{format(data.date?.toDate ? data.date.toDate() : new Date(), "dd/MM/yyyy HH:mm")}</p>
-                <p className="text-xs">User: {data.user?.split('@')[0]}</p>
+        {/* Print Layout (A4) */}
+        <div className="hidden print:block p-8 bg-white w-full max-w-[210mm] mx-auto text-black print:text-sm">
+            {/* Header */}
+            <div className="flex justify-between items-start mb-6 border-b pb-4 border-gray-300">
+                <div>
+                    <h1 className="text-2xl font-bold mb-2">Farm Aroi</h1>
+                    <h2 className="text-xl font-semibold">ใบสั่งซื้อสินค้า (Purchase Order)</h2>
+                </div>
+                <div className="text-right text-sm">
+                    <p><span className="font-bold">วันที่:</span> {format(data?.date?.toDate ? data.date.toDate() : new Date(), "dd/MM/yyyy HH:mm")}</p>
+                    <p><span className="font-bold">สาขา:</span> {branchName}</p>
+                    <p><span className="font-bold">ผู้ทำรายการ:</span> {data?.user?.split('@')[0]}</p>
+                    {data?.status === 'completed' && <p className="text-green-600 font-bold mt-1">[ได้รับของแล้ว]</p>}
+                </div>
             </div>
-             <div className="space-y-4">
-                {Object.entries(groupedItems).map(([source, items]) => (
-                    <div key={source as string}>
-                        <h2 className="font-bold border-b border-black mb-1 mt-2 text-sm">{source as string}</h2>
-                        <ul className="space-y-1">
-                            {(items as any[]).map((item: any, idx: number) => (
-                                <li key={idx} className="flex items-start">
-                                    <span className="mr-1 -mt-0.5">[ ]</span>
-                                    <div className="flex-1 flex justify-between leading-tight">
-                                        <span className="mr-1">{item.productName}</span>
-                                        <span className="whitespace-nowrap font-bold">{item.toOrder} {item.unit}</span>
-                                    </div>
-                                </li>
-                            ))}
-                        </ul>
-                    </div>
-                ))}
+
+            {/* A4 Table - 2 Columns */}
+            <div className="flex gap-4 items-start">
+                 {(() => {
+                        // Flatten items first
+                        let allItems: any[] = [];
+                        Object.entries(groupedItems).forEach(([source, items]: [string, any]) => {
+                            allItems = allItems.concat(items.map((i:any) => ({...i, source})));
+                        });
+
+                        // Split into 2 columns
+                        const mid = Math.ceil(allItems.length / 2);
+                        const col1 = allItems.slice(0, mid);
+                        const col2 = allItems.slice(mid);
+
+                        const RenderTable = ({ items, startIndex }: { items: any[], startIndex: number }) => (
+                            <table className="w-1/2 border-collapse border border-gray-400 text-[10px]">
+                                <thead>
+                                    <tr className="bg-gray-200 text-black">
+                                        <th className="border border-gray-400 px-1 py-1 text-center w-8">#</th>
+                                        <th className="border border-gray-400 px-1 py-1 text-left">รายการ</th>
+                                        <th className="border border-gray-400 px-1 py-1 text-center w-12">จำนวน</th>
+                                        <th className="border border-gray-400 px-1 py-1 text-center w-16">ราคา</th>
+                                        <th className="border border-gray-400 px-1 py-1 text-center w-20">ซื้อจาก</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {items.map((item, idx) => (
+                                        <tr key={idx} className="break-inside-avoid">
+                                            <td className="border border-gray-400 px-1 py-1 text-center">{startIndex + idx + 1}</td>
+                                            <td className="border border-gray-400 px-1 py-1">
+                                                <span className="font-bold block text-[11px] leading-tight">{item.productName}</span>
+                                                <span className="text-[9px] text-gray-600 block leading-none">
+                                                   ({item.source})
+                                                </span>
+                                            </td>
+                                            <td className="border border-gray-400 px-1 py-1 text-center font-bold">
+                                                {item.toOrder} <span className="font-normal text-[9px]">{item.unit}</span>
+                                            </td>
+                                            <td className="border border-gray-400 px-1 py-1"></td>
+                                            <td className="border border-gray-400 px-1 py-1"></td>
+                                        </tr>
+                                    ))}
+                                    {/* Fill empty rows to balance height if needed, or just leave as is */}
+                                </tbody>
+                            </table>
+                        );
+
+                        return (
+                            <>
+                                <RenderTable items={col1} startIndex={0} />
+                                {col2.length > 0 && <RenderTable items={col2} startIndex={mid} />}
+                            </>
+                        );
+                 })()}
+            </div>
+
+            <div className="mt-8 pt-8 border-t border-gray-300 flex justify-between">
+                <div className="w-1/3 text-center">
+                    <p className="mb-8 border-b border-dotted border-gray-400 pb-2"></p>
+                    <p>ผู้สั่งซื้อ</p>
+                </div>
+                 <div className="w-1/3 text-center">
+                    <p className="mb-8 border-b border-dotted border-gray-400 pb-2"></p>
+                    <p>ผู้อนุมัติ</p>
+                </div>
             </div>
         </div>
 
@@ -613,8 +809,17 @@ export default function PODetailPage() {
                         className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700 flex items-center"
                     >
                         <Printer className="w-4 h-4 mr-2" />
-                        พิมพ์ใบรับของ
+                        พิมพ์ใบรับของ (A4)
                     </button>
+                    <button 
+                        onClick={handleBluetoothPrintStockIn}
+                        disabled={isPrinting}
+                        className="px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 flex items-center disabled:opacity-50"
+                    >
+                        <Bluetooth className="w-4 h-4 mr-2" />
+                         {isPrinting ? "กำลังส่ง..." : "พิมพ์ใบเสร็จ"}
+                    </button>
+
                 </div>
              </div>
          </div>

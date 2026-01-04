@@ -1,8 +1,9 @@
+
 "use client";
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { LayoutDashboard, Package, Users, Store, LogOut, Settings, Menu, X } from "lucide-react";
+import { LayoutDashboard, Package, Users, Store, LogOut, Settings, Menu, X, FileText } from "lucide-react";
 import { useAuth } from "@/lib/firebase/context";
 import { auth } from "@/lib/firebase/config";
 import { signOut } from "firebase/auth";
@@ -31,6 +32,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     { href: "/admin/dashboard", label: "แดชบอร์ด", icon: LayoutDashboard },
     { href: "/admin/products", label: "จัดการสินค้า", icon: Package },
     { href: "/admin/users", label: "ผู้ใช้งาน", icon: Users },
+    { href: "/admin/reports", label: "รายงาน", icon: FileText },
     { href: "/admin/branches", label: "จัดการสาขา", icon: Store },
     { href: "/admin/settings", label: "ตั้งค่า", icon: Settings },
   ];

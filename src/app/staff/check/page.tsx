@@ -333,59 +333,119 @@ function CheckContent() {
 
   <div className="space-y-4">
     {filteredItems.map((item) => (
-      <div key={item.productId} className={`bg-white rounded-xl shadow-sm border border-gray-100 p-4 ${item.toOrder > 0 ? "ring-1 ring-red-100 bg-red-50/30" : ""}`}>
-          {/* Top Row: Name & Min Stock */}
-          <div className="flex justify-between items-start mb-2">
-              <div className="flex-1 mr-2">
-                  <h3 className="font-bold text-gray-900 text-lg leading-tight">{item.product.name}</h3>
-                  <p className="text-sm text-gray-500 mt-1">{item.product.category} • {item.product.unit} <span className="text-gray-400">({item.product.source})</span></p>
-              </div>
-              
-              <div className="flex flex-col items-end">
-                   <label className="text-[10px] font-medium text-gray-400 mb-0.5">ขั้นต่ำ</label>
-                   <input
-                       type="number"
-                       inputMode="decimal"
-                       className="w-16 h-8 text-center text-sm bg-gray-50 border border-dashed border-gray-300 rounded px-1 text-gray-500 focus:bg-white focus:text-gray-900 focus:border-green-500 transition-all"
-                       value={item.minStock}
-                       onChange={(e) => handleMinStockChange(item.productId, e.target.value)}
-                       onBlur={() => saveMinStock(item)}
-                   />
-              </div>
+      <div 
+          key={item.productId} 
+          className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-3 focus-within:ring-2 focus-within:ring-green-500 focus-within:bg-green-50 transition-all duration-200"
+      >
+          {/* Header Row */}
+          <div className="flex justify-between items-start">
+               <div>
+                   <h3 className="font-bold text-gray-900 text-lg leading-snug">{item.product.name}</h3>
+                   <div className="flex items-center gap-2 mt-1">
+                       <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
+                          {item.product.category}
+                       </span>
+                       <span className="text-xs text-gray-400">
+                          {item.product.source}
+                       </span>
+                   </div>
+               </div>
+               
+               {/* Min Stock (Secondary Info) */}
+               <div className="flex flex-col items-end">
+                   <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1">ขั้นต่ำ (Min)</span>
+                   <div className="flex items-center bg-gray-50 rounded-lg p-1 border border-gray-100">
+                      <input 
+                          type="number"
+                          inputMode="decimal"
+                          className="w-12 text-center text-sm font-bold bg-transparent outline-none text-gray-600"
+                          value={item.minStock}
+                          onChange={(e) => handleMinStockChange(item.productId, e.target.value)}
+                          onBlur={() => saveMinStock(item)}
+                      />
+                   </div>
+               </div>
           </div>
 
-          {/* Warning Badge */}
-          {item.toOrder > 0 && (
-              <div className="bg-red-50 text-red-600 px-3 py-1.5 rounded-lg text-sm font-medium mb-4 inline-block border border-red-100 w-full text-center">
-                  ต้องสั่งเพิ่ม {Math.ceil(item.toOrder)} {item.product.unit}
-              </div>
-          )}
 
           {/* Main Controls Row (Full Width) */}
-          <div className="pt-2 border-t border-gray-50">
-              <label className="text-xs font-medium text-gray-500 mb-2 block text-center">จำนวนที่มีอยู่จริง (นับได้)</label>
-              <div className="flex items-center gap-3">
-                   <button 
-                     onClick={() => adjustStock(item.productId, -1)}
-                     className="w-12 h-12 rounded-xl border border-gray-200 bg-white shadow-sm flex items-center justify-center text-gray-600 active:bg-gray-100 active:scale-95 transition-all touch-manipulation"
-                   >
-                       <Minus className="w-6 h-6" />
-                   </button>
-                   <input 
-                       type="number"
-                       inputMode="decimal"
-                       className="flex-1 h-12 text-center text-2xl font-bold border border-gray-300 rounded-xl focus:ring-2 focus:ring-green-500 focus:border-green-500 shadow-inner bg-gray-50"
-                       value={item.currentStock}
-                       onChange={(e) => handleCurrentChange(item.productId, e.target.value)}
-                       onFocus={(e) => e.target.select()} // Select all on tap
-                       placeholder="0"
-                   />
-                   <button 
-                     onClick={() => adjustStock(item.productId, 1)}
-                     className="w-12 h-12 rounded-xl border border-green-200 bg-green-50 shadow-sm flex items-center justify-center text-green-700 active:bg-green-100 active:scale-95 transition-all touch-manipulation"
-                   >
-                       <Plus className="w-6 h-6" />
-                   </button>
+          <div className="pt-2 border-t border-gray-100/50 space-y-4">
+              
+              {/* Row 1: Current Stock (Primary Action) */}
+              <div>
+                  <label className="text-xs font-bold text-gray-500 mb-2 block uppercase tracking-wide text-center">
+                    ของที่มีอยู่ (Current)
+                  </label>
+                  <div className="flex items-center gap-3">
+                       <button 
+                         onClick={() => adjustStock(item.productId, -1)}
+                         className="h-14 w-1/6 rounded-2xl border border-orange-200 bg-white shadow-sm flex items-center justify-center text-gray-600 active:bg-gray-100 active:scale-95 transition-all touch-manipulation"
+                       >
+                           <Minus className="w-6 h-6" />
+                       </button>
+                       <input 
+                           type="number"
+                           inputMode="decimal"
+                           className="w-4/6 h-14 text-center text-3xl font-bold border border-blue-300 rounded-2xl focus:ring-4 focus:ring-green-100 focus:border-green-500 shadow-inner bg-white text-gray-800"
+                           value={item.currentStock}
+                           onChange={(e) => handleCurrentChange(item.productId, e.target.value)}
+                           onFocus={(e) => e.target.select()} 
+                           placeholder="0"
+                       />
+                       <button 
+                         onClick={() => adjustStock(item.productId, 1)}
+                         className="h-14 w-1/6 rounded-2xl border border-green-200 bg-green-50 shadow-sm flex items-center justify-center text-green-700 active:bg-green-100 active:scale-95 transition-all touch-manipulation"
+                       >
+                           <Plus className="w-6 h-6" />
+                       </button>
+                  </div>
+              </div>
+
+              {/* Row 2: To Order (Secondary Action) */}
+              <div className={`p-4 rounded-xl border-2 transition-all ${item.toOrder > 0 ? "bg-orange-50 border-orange-600" : "bg-gray-80 border-gray-100 border-dashed"}`}>
+                  <div className="flex flex-col gap-2">
+                      <div className="flex justify-between items-center">
+                          <label className={`text-sm font-bold flex items-center gap-2 ${item.toOrder > 0 ? "text-gray-700" : "text-gray-400"}`}>
+                             <div className={`w-2 h-2 rounded-full ${item.toOrder > 0 ? "bg-gray-800 animate-pulse" : "bg-gray-300"}`}></div>
+                             ต้องสั่งเพิ่ม (To Order)
+                          </label>
+                          <span className="text-md text-gray-600 font-medium">{item.product.unit}</span>
+                      </div>
+                      
+                      <div className="flex items-center gap-2">
+                           <button 
+                             onClick={() => {
+                                 const newVal = Math.max(0, (item.toOrder || 0) - 1);
+                                 setItems(prev => prev.map(i => i.productId === item.productId ? { ...i, toOrder: newVal } : i));
+                             }}
+                             className={`h-10 w-1/6 rounded-lg border flex items-center justify-center transition-all active:scale-95 ${item.toOrder > 0 ? "border-red-200 bg-white text-red-600" : "border-gray-200 bg-white text-gray-400"}`}
+                           >
+                               <Minus className="w-6 h-6" />
+                           </button>
+
+                           <input
+                               type="number"
+                               inputMode="decimal"
+                               className={`flex-1 h-10 w-4/6 text-center font-bold rounded-lg border-2 focus:ring-2 focus:ring-red-100 focus:border-red-400 ${item.toOrder > 0 ? "text-red-600 border-red-200 bg-white text-xl" : "text-gray-400 border-gray-200 bg-gray-50/50"}`}
+                               value={item.toOrder === 0 ? '' : item.toOrder}
+                               onChange={(e) => {
+                                   const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                                   setItems(prev => prev.map(i => i.productId === item.productId ? { ...i, toOrder: val } : i));
+                               }}
+                               placeholder="0"
+                           />
+
+                           <button 
+                             onClick={() => {
+                                 const newVal = (item.toOrder || 0) + 1;
+                                 setItems(prev => prev.map(i => i.productId === item.productId ? { ...i, toOrder: newVal } : i));
+                             }}
+                             className={`h-10 w-1/6 rounded-lg border flex items-center justify-center transition-all active:scale-95 ${item.toOrder > 0 ? "border-red-200 bg-red-100 text-red-700" : "border-gray-200 bg-gray-100 text-gray-500 hover:bg-white"}`}
+                           >
+                               <Plus className="w-6 h-6" />
+                           </button>
+                      </div>
+                  </div>
               </div>
           </div>
       </div>
