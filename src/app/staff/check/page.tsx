@@ -342,7 +342,7 @@ function CheckContent() {
               </div>
               {item.toOrder > 0 && (
                   <div className="bg-red-100 text-red-700 px-2 py-1 rounded text-xs whitespace-nowrap">
-                      ขั้นต่ำ {Math.ceil(item.toOrder)}
+                      สั่งเพิ่มอีกอย่างน้อย {Math.ceil(item.toOrder)}
                   </div>
               )}
           </div>
