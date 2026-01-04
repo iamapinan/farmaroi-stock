@@ -299,7 +299,8 @@ export default function PODetailPage() {
         cmds.push(
             PRINTER_COMMANDS.LF,
             PRINTER_COMMANDS.LF,
-            PRINTER_COMMANDS.LF // Feed
+            PRINTER_COMMANDS.LF, // Feed
+            PRINTER_COMMANDS.CUT // Auto Cut
         );
 
         await print(concatBuffers(cmds));
@@ -364,7 +365,8 @@ export default function PODetailPage() {
               encodeToThai("................................"), PRINTER_COMMANDS.LF,
               encodeToThai("ผู้รับสินค้า"), PRINTER_COMMANDS.LF,
               PRINTER_COMMANDS.LF,
-              PRINTER_COMMANDS.LF
+              PRINTER_COMMANDS.LF,
+              PRINTER_COMMANDS.CUT // Auto Cut
           );
 
            await print(concatBuffers(cmds));

@@ -5,11 +5,11 @@ import { Suspense } from "react";
 import StaffLayout from "@/components/layouts/StaffLayout";
 import StaffGuard from "@/components/auth/StaffGuard";
 import { useEffect, useState } from "react";
-import { collection, getDocs, doc, setDoc, getDoc, query, where, Timestamp, addDoc, updateDoc } from "firebase/firestore";
+import { collection, getDocs, doc, setDoc, getDoc, query, where, Timestamp, addDoc, updateDoc, onSnapshot } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { useAuth } from "@/lib/firebase/context";
 import { useRouter, useSearchParams } from "next/navigation";
-import { Save, ArrowRight, Plus, Minus, Search } from "lucide-react";
+import { Save, ArrowRight, Plus, Minus, Search, RefreshCw } from "lucide-react";
 import { useMasterData } from "@/hooks/useMasterData";
 
 interface Product {
@@ -67,11 +67,99 @@ function CheckContent() {
 
              if (editId) {
                 loadEditData(editId);
+            } else {
+                // Initialize Real-time Listener for NEW checks only (edit mode ignores drafts for now?)
+                // Or maybe traversing edit mode should also be synced? 
+                // The prompt implies "check stock simultaneously", usually for daily check.
+                // Let's enable it for daily check (no editId).
+                subscribeToDraft(targetBranch);
             }
         }
     };
     init();
   }, [userProfile, editId]);
+
+  // Real-time Sync Logic
+  const subscribeToDraft = (branchId: string) => {
+      const today = new Date().toISOString().split('T')[0];
+      const draftId = `draft_${branchId}_${today}`;
+      const draftRef = doc(db, "check_drafts", draftId);
+
+      const unsubscribe = onSnapshot(draftRef, (docSnap) => {
+          if (docSnap.exists()) {
+              const data = docSnap.data();
+              const draftItems = data.items || {};
+              
+              setItems(prevItems => {
+                  // Merge draft data into current items logic
+                  // Only update if value is different to avoid cursor jumping if we were typing?
+                  // Actually, if *remote* changed, we must update.
+                  // If *local* matches, no change.
+                  return prevItems.map(item => {
+                      const draft = draftItems[item.productId];
+                      if (draft) {
+                          // Check if we have pending local changes? 
+                          // unique-last-write wins is simplest.
+                          // We might need to track "lastUpdated" to avoid overwriting our own immediate typing?
+                          // But onSnapshot fires on local writes too (latency compensation).
+                          // React state update might conflict if we are mid-typing.
+                          // However, standard intuitive "google docs" style works by just accepting the stream usually.
+                          // Let's try merging.
+
+                          // If the draft value is different from current, update
+                          if (draft.currentStock !== item.currentStock || draft.toOrder !== item.toOrder) {
+                              return {
+                                  ...item,
+                                  currentStock: draft.currentStock !== undefined ? draft.currentStock : item.currentStock,
+                                  toOrder: draft.toOrder !== undefined ? draft.toOrder : item.toOrder
+                              };
+                          }
+                      }
+                      return item;
+                  });
+              });
+          }
+      });
+
+      return () => unsubscribe();
+  };
+
+  const saveDraftItem = async (branchId: string, productId: string, data: { currentStock?: string, toOrder?: number }) => {
+      if (!branchId) return;
+      const today = new Date().toISOString().split('T')[0];
+      const draftId = `draft_${branchId}_${today}`;
+      const draftRef = doc(db, "check_drafts", draftId);
+      
+      const payload = {
+          ...data,
+          updatedAt: Timestamp.now(),
+          updatedBy: userProfile?.email
+      };
+
+      try {
+          // Try update first (most common case during checking)
+          await updateDoc(draftRef, {
+              [`items.${productId}`]: payload
+          });
+      } catch (e: any) {
+          // If document doesn't exist, create it
+          if (e.code === 'not-found') {
+              try {
+                  await setDoc(draftRef, {
+                      branchId,
+                      date: today,
+                      items: {
+                          [productId]: payload
+                      }
+                  });
+              } catch (createErr) {
+                   console.error("Error creating draft", createErr);
+              }
+          } else {
+               console.error("Error updating draft", e);
+          }
+      }
+  };
 
   const loadEditData = async (id: string) => {
       try {
@@ -151,6 +239,20 @@ function CheckContent() {
             toOrder: toOrder
         };
       });
+
+      // Sort: Low Stock First, then Alphabetical
+      initialItems.sort((a, b) => {
+          const aCurrent = parseFloat(a.currentStock) || 0;
+          const bCurrent = parseFloat(b.currentStock) || 0;
+          const aLow = aCurrent < a.minStock;
+          const bLow = bCurrent < b.minStock;
+
+          if (aLow && !bLow) return -1;
+          if (!aLow && bLow) return 1;
+          
+          return a.product.name.localeCompare(b.product.name);
+      });
+
       setItems(initialItems);
 
     } catch (error) {
@@ -172,10 +274,19 @@ function CheckContent() {
     setItems(items.map(i => {
       if (i.productId === productId) {
         // Allow empty string for backspace
-        if (val === "") return { ...i, currentStock: "", toOrder: i.minStock };
+        if (val === "") {
+             if (activeBranchId && !editId) saveDraftItem(activeBranchId, productId, { currentStock: "", toOrder: i.minStock }); // Sync empty
+             return { ...i, currentStock: "", toOrder: i.minStock };
+        }
 
         const current = parseFloat(val);
         const toOrder = Math.max(0, i.minStock - (isNaN(current) ? 0 : current));
+        
+        // Sync
+        if (activeBranchId && !editId) {
+            saveDraftItem(activeBranchId, productId, { currentStock: val, toOrder });
+        }
+
         return { ...i, currentStock: val, toOrder };
       }
       return i;
@@ -188,6 +299,12 @@ function CheckContent() {
              const currentVal = parseFloat(i.currentStock) || 0;
              const newVal = Math.max(0, currentVal + delta);
              const toOrder = Math.max(0, i.minStock - newVal);
+
+             // Sync
+             if (activeBranchId && !editId) {
+                saveDraftItem(activeBranchId, productId, { currentStock: newVal.toString(), toOrder });
+             }
+
              return { ...i, currentStock: newVal.toString(), toOrder };
          }
          return i;
@@ -264,6 +381,17 @@ function CheckContent() {
         } else {
             // Create New
             const docRef = await addDoc(collection(db, "daily_checks"), checkData);
+            
+            // CLEANUP: Delete the draft
+            try {
+                const today = new Date().toISOString().split('T')[0];
+                const draftId = `draft_${activeBranchId}_${today}`;
+                const { deleteDoc } = await import("firebase/firestore"); // Import deleteDoc dynamically or add to top imports
+                await deleteDoc(doc(db, "check_drafts", draftId));
+            } catch (e) {
+                console.error("Failed to delete draft", e);
+            }
+
             router.push(`/staff/po/${docRef.id}`);
             if (toOrderCount > 0) {
                 alert(`บันทึกเรียบร้อย! มี ${toOrderCount} รายการที่ต้องสั่งซื้อ`);
@@ -416,6 +544,8 @@ function CheckContent() {
                            <button 
                              onClick={() => {
                                  const newVal = Math.max(0, (item.toOrder || 0) - 1);
+                                 // Sync
+                                 if (activeBranchId && !editId) saveDraftItem(activeBranchId, item.productId, { toOrder: newVal });
                                  setItems(prev => prev.map(i => i.productId === item.productId ? { ...i, toOrder: newVal } : i));
                              }}
                              className={`h-10 w-1/6 rounded-lg border flex items-center justify-center transition-all active:scale-95 ${item.toOrder > 0 ? "border-red-200 bg-white text-red-600" : "border-gray-200 bg-white text-gray-400"}`}
@@ -430,6 +560,8 @@ function CheckContent() {
                                value={item.toOrder === 0 ? '' : item.toOrder}
                                onChange={(e) => {
                                    const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                                   // Sync
+                                   if (activeBranchId && !editId) saveDraftItem(activeBranchId, item.productId, { toOrder: val });
                                    setItems(prev => prev.map(i => i.productId === item.productId ? { ...i, toOrder: val } : i));
                                }}
                                placeholder="0"
@@ -438,6 +570,8 @@ function CheckContent() {
                            <button 
                              onClick={() => {
                                  const newVal = (item.toOrder || 0) + 1;
+                                 // Sync
+                                 if (activeBranchId && !editId) saveDraftItem(activeBranchId, item.productId, { toOrder: newVal });
                                  setItems(prev => prev.map(i => i.productId === item.productId ? { ...i, toOrder: newVal } : i));
                              }}
                              className={`h-10 w-1/6 rounded-lg border flex items-center justify-center transition-all active:scale-95 ${item.toOrder > 0 ? "border-red-200 bg-red-100 text-red-700" : "border-gray-200 bg-gray-100 text-gray-500 hover:bg-white"}`}
