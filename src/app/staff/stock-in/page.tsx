@@ -274,6 +274,7 @@ export default function StockInPage() {
                             <label className="text-xs text-gray-500 block mb-1">จำนวนที่รับ</label>
                             <input
                                 type="number"
+                                inputMode="decimal"
                                 value={item.qty}
                                 onChange={(e) => handleUpdateItem(item.productId, 'qty', e.target.value)}
                                 className="w-full border rounded px-2 py-1.5 focus:ring-1 focus:ring-green-500"
@@ -284,6 +285,7 @@ export default function StockInPage() {
                              <label className="text-xs text-gray-500 block mb-1">ราคารวม (บาท)</label>
                             <input
                                 type="number"
+                                inputMode="decimal"
                                 value={item.price}
                                 onChange={(e) => handleUpdateItem(item.productId, 'price', e.target.value)}
                                 className="w-full border rounded px-2 py-1.5 focus:ring-1 focus:ring-green-500"
@@ -361,6 +363,7 @@ export default function StockInPage() {
                             <label className="block text-sm font-medium">Min Stock (แจ้งเตือนเมื่อต่ำกว่า)</label>
                              <input 
                                 type="number"
+                                inputMode="decimal"
                                 className="w-full border rounded px-3 py-2"
                                 value={customProductForm.minStock}
                                 onChange={e => setCustomProductForm({...customProductForm, minStock: e.target.value})}
