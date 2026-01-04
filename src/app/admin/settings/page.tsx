@@ -178,7 +178,7 @@ export default function SettingsPage() {
                     setNewItem={setNewCat} 
                     type="categories"
                     icon={Tag}
-                    color="text-purple-600"
+                    color="text-pink-600"
                     placeholder="เช่น ผัก, เนื้อสัตว์, เครื่องดื่ม..."
                     onAdd={handleAdd}
                     onDelete={handleDelete}

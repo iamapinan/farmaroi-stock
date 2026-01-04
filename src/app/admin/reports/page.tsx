@@ -13,12 +13,14 @@ interface Product {
   category: string;
   unit: string;
   source: string;
+  minStock?: number;
 }
 
 interface StockItem {
   productId: string;
   productName: string;
   category: string;
+  toOrder: number;
   amount: number;
   unit: string;
 }
@@ -59,6 +61,14 @@ export default function ReportsPage() {
         const prodList = pSnap.docs.map(d => ({ id: d.id, ...d.data() } as Product));
         setProducts(prodList);
 
+        // Branch Products (Min Stocks)
+        const bpSnap = await getDocs(collection(db, "branch_products"));
+        const minStockMap: Record<string, number> = {};
+        bpSnap.forEach(d => {
+            const data = d.data();
+            minStockMap[`${data.branchId}_${data.productId}`] = data.minStock;
+        });
+
         // Stocks (All)
         const sSnap = await getDocs(collection(db, "stocks"));
         const stockList: StockItem[] = [];
@@ -68,10 +78,17 @@ export default function ReportsPage() {
             const data = doc.data();
             const prod = prodList.find(p => p.id === data.productId);
             if (prod) {
+                // Calculate To Order
+                const minStock = minStockMap[`${data.branchId}_${data.productId}`] || prod.minStock || 0;
+                // If minStock is 0, TO ORDER should ideally be 0 unless specific logic.
+                // Assuming toOrder = max(0, minStock - currentStock)
+                const toOrder = Math.max(0, minStock - data.amount);
+
                 stockList.push({
                     productId: data.productId,
                     productName: prod.name,
                     category: prod.category,
+                    toOrder: toOrder, 
                     amount: data.amount,
                     unit: prod.unit,
                     ...data // includes branchId
@@ -80,8 +97,7 @@ export default function ReportsPage() {
         });
         setStocks(stockList);
 
-        // Transactions (Last 30 days default? Or all?)
-        // Let's get recent 100 for now or filtering later
+        // Transactions
         const tSnap = await getDocs(query(collection(db, "stock_transactions"), orderBy("date", "desc")));
         setTransactions(tSnap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)));
 
@@ -98,11 +114,6 @@ export default function ReportsPage() {
       return true;
   });
 
-  // Aggregate stocks by product if "All" is selected (Sum amounts)
-  // Or just list them? Listing per branch is probably better for "All" view or grouping.
-  // Let's group by Product if All, or just show list.
-  // If All, showing separate lines for each branch is clearer for "Stock Balance".
-  
   const filteredTransactions = transactions.filter(t => {
        if (selectedBranch !== "All" && t.branchId !== selectedBranch) return false;
        return true;
@@ -115,7 +126,7 @@ export default function ReportsPage() {
 
     if (activeTab === 'balance') {
         // Headers
-        csvContent += "สินค้า,หมวดหมู่,สาขา,คงเหลือ,หน่วย\n";
+        csvContent += "สินค้า,หมวดหมู่,สาขา,จำนวนคงเหลือ,หน่วย\n";
         
         // Rows
         filteredStocks.forEach(item => {
@@ -214,24 +225,9 @@ export default function ReportsPage() {
             </div>
 
             {/* Print Header (Visible only in Print) */}
-            <div className="hidden print:block text-center mb-6">
-                <div className="flex flex-col items-center justify-center">
-                    <h1 className="text-2xl font-bold mb-2">Farm Aroi Stock Report</h1>
-                    <div className="text-sm font-medium border px-4 py-1 rounded-full mb-4">
-                        {activeTab === 'balance' ? "รายงานสินค้าคงเหลือ (Stock Balance)" : "ประวัติการสั่งซื้อ (Purchase History)"}
-                    </div>
-                </div>
-                
-                <div className="flex justify-between items-end border-b-2 border-black pb-2 mt-4 text-xs">
-                    <div className="text-left">
-                        <p><strong>สาขา:</strong> {selectedBranch === "All" ? "ทั้งหมด (All Branches)" : branches.find(b => b.id === selectedBranch)?.name}</p>
-                        <p><strong>ประเภท:</strong> {activeTab === 'balance' ? 'Stock Balance' : 'Transactions'}</p>
-                    </div>
-                    <div className="text-right">
-                        <p><strong>วันที่พิมพ์:</strong> {new Date().toLocaleString('th-TH')}</p>
-                        <p><strong>ผู้สั่งพิมพ์:</strong> Admin</p>
-                    </div>
-                </div>
+            <div className="hidden print:block text-center mb-4">
+                <h1 className="text-xl font-bold mb-1">รายงานสินค้าคงเหลือ (Stock Balance)</h1>
+                <p className="text-sm">สาขา: {selectedBranch === "All" ? "ทั้งหมด" : branches.find(b => b.id === selectedBranch)?.name} | ข้อมูล ณ วันที่: {new Date().toLocaleString('th-TH')}</p>
             </div>
 
             {/* Tabs (No Print) */}
@@ -260,13 +256,13 @@ export default function ReportsPage() {
                 {!loading && activeTab === 'balance' && (
                     <div className="overflow-x-auto print:overflow-visible">
                         <table className="w-full text-sm text-left print:text-xs">
-                            <thead className="bg-gray-50 text-gray-600 font-medium border-b print:bg-gray-100 print:text-black print:border-black">
+                            <thead className="bg-gray-50 text-gray-600 font-medium border-b print:bg-transparent print:text-black print:border-black print:border-b-2">
                                 <tr>
-                                    <th className="py-3 px-4 print:py-1">สินค้า</th>
-                                    <th className="py-3 px-4 print:py-1">หมวดหมู่</th>
-                                    <th className="py-3 px-4 text-center print:py-1">สาขา</th>
-                                    <th className="py-3 px-4 text-right print:py-1">คงเหลือ</th>
-                                    <th className="py-3 px-4 text-right print:py-1">หน่วย</th>
+                                    <th className="py-3 px-4 print:py-1 print:px-2">สินค้า</th>
+                                    <th className="py-3 px-4 print:py-1 print:px-2">หมวดหมู่</th>
+                                    <th className="py-3 px-4 text-center print:py-1 print:px-2">สาขา</th>
+                                    <th className="py-3 px-4 text-right print:py-1 print:px-2">จำนวนคงเหลือ</th>
+                                    <th className="py-3 px-4 text-right print:py-1 print:px-2">หน่วย</th>
                                 </tr>
                             </thead>
                             <tbody className="divide-y divide-gray-100 print:divide-gray-300">
@@ -274,15 +270,15 @@ export default function ReportsPage() {
                                     <tr><td colSpan={5} className="py-8 text-center text-gray-400">ไม่พบข้อมูล</td></tr>
                                 ) : filteredStocks.map((item, idx) => (
                                     <tr key={idx} className="hover:bg-gray-50 print:hover:bg-transparent">
-                                        <td className="py-3 px-4 font-medium text-gray-900 print:py-1">{item.productName}</td>
-                                        <td className="py-3 px-4 text-gray-500 print:py-1">{item.category}</td>
-                                        <td className="py-3 px-4 text-center text-gray-500 print:py-1">
+                                        <td className="py-3 px-4 font-medium text-gray-900 print:py-1 print:px-2 print:text-black">{item.productName}</td>
+                                        <td className="py-3 px-4 text-gray-500 print:py-1 print:px-2 print:text-black">{item.category}</td>
+                                        <td className="py-3 px-4 text-center text-gray-500 print:py-1 print:px-2 print:text-black">
                                             {(item as any).branchId ? branches.find(b => b.id === (item as any).branchId)?.name : '-'}
                                         </td>
-                                        <td className={`py-3 px-4 text-right font-bold print:py-1 ${item.amount <= 0 ? 'text-red-500' : 'text-gray-900'}`}>
+                                        <td className={`py-3 px-4 text-right font-bold print:py-1 print:px-2 print:text-black ${item.amount > 0 ? 'text-gray-900' : 'text-red-500'}`}>
                                             {item.amount.toLocaleString()}
                                         </td>
-                                        <td className="py-3 px-4 text-right text-gray-500 print:py-1">{item.unit}</td>
+                                        <td className="py-3 px-4 text-right text-gray-500 print:py-1 print:px-2 print:text-black">{item.unit}</td>
                                     </tr>
                                 ))}
                             </tbody>

@@ -27,6 +27,7 @@ interface StockItem {
   minStock: number;
   currentStock: string; // string for input, parse to number
   toOrder: number;
+  isModified?: boolean;
 }
 
 function CheckContent() {
@@ -63,21 +64,44 @@ function CheckContent() {
         
         if (targetBranch) {
              setActiveBranchId(targetBranch);
+
+             // Check for existing daily check
+             if (!editId) {
+                 const today = new Date();
+                 today.setHours(0,0,0,0);
+                 const queryDate = Timestamp.fromDate(today);
+                 
+                 const q = query(
+                     collection(db, "daily_checks"),
+                     where("branchId", "==", targetBranch),
+                     where("date", ">=", queryDate)
+                 );
+                 
+                 const snap = await getDocs(q);
+                 if (!snap.empty) {
+                     // Found existing check for today
+                     const existingId = snap.docs[0].id;
+                     if (confirm("วันนี้มีการเช็คสต๊อกไปแล้ว ต้องการแก้ไขรายการเดิมหรือไม่?")) {
+                         router.push(`/staff/check?editId=${existingId}`);
+                         return;
+                     } else {
+                         router.push('/staff'); 
+                         return;
+                     }
+                 }
+             }
+
              await loadData(targetBranch);
 
              if (editId) {
                 loadEditData(editId);
             } else {
-                // Initialize Real-time Listener for NEW checks only (edit mode ignores drafts for now?)
-                // Or maybe traversing edit mode should also be synced? 
-                // The prompt implies "check stock simultaneously", usually for daily check.
-                // Let's enable it for daily check (no editId).
                 subscribeToDraft(targetBranch);
             }
         }
     };
     init();
-  }, [userProfile, editId]);
+  }, [userProfile, editId, router]);
 
   // Real-time Sync Logic
   const subscribeToDraft = (branchId: string) => {
@@ -176,12 +200,32 @@ function CheckContent() {
               
               setItems(prevItems => prevItems.map(item => {
                   const savedOrder = savedItemsMap[item.productId];
+                  // If saved check has the current stock recorded, use it (future proofing)
+                  // Current data structure in DB might not have it yet, so we check.
+                  const savedItem = data.items.find((i: any) => i.productId === item.productId);
+                  
                   if (savedOrder !== undefined) {
-                      const derivedCurrent = Math.max(0, item.minStock - savedOrder);
+                      let loadedCurrent = item.currentStock;
+                      
+                      if (savedItem && savedItem.savedCurrentStock !== undefined) {
+                          // Use explicitly saved stock from the check record
+                          loadedCurrent = savedItem.savedCurrentStock.toString();
+                      } else {
+                          // Legacy support: derive or keep live? 
+                          // User request: "Load current stock to show".
+                          // If we don't have a saved snapshot, 'live' stock (already in item.currentStock) is the best proxy for "current".
+                          // Deriving strictly from minStock - savedOrder is risky if formula wasn't followed.
+                          // However, previously the code did derive. 
+                          // Let's trust the live stock loaded in loadData, UNLESS we derived it to be negative or something?
+                          // Actually, leave it as live stock (from loadData) is safest for "Existing Stock".
+                          // AND set toOrder from the saved record.
+                      }
+
                       return {
                           ...item,
                           toOrder: savedOrder,
-                          currentStock: derivedCurrent.toString()
+                          currentStock: loadedCurrent,
+                          isModified: false // Reset modified on load
                       };
                   }
                   return item;
@@ -287,7 +331,7 @@ function CheckContent() {
             saveDraftItem(activeBranchId, productId, { currentStock: val, toOrder });
         }
 
-        return { ...i, currentStock: val, toOrder };
+        return { ...i, currentStock: val, toOrder, isModified: true };
       }
       return i;
     }));
@@ -305,7 +349,7 @@ function CheckContent() {
                 saveDraftItem(activeBranchId, productId, { currentStock: newVal.toString(), toOrder });
              }
 
-             return { ...i, currentStock: newVal.toString(), toOrder };
+             return { ...i, currentStock: newVal.toString(), toOrder, isModified: true };
          }
          return i;
      }));
@@ -339,7 +383,8 @@ function CheckContent() {
         productName: i.product.name,
         source: i.product.source,
         unit: i.product.unit,
-        toOrder: i.toOrder
+        toOrder: i.toOrder,
+        savedCurrentStock: parseFloat(i.currentStock) || 0 // Save the stock count for restoring edit
      }));
 
      const toOrderCount = orderItems.length;
@@ -354,20 +399,24 @@ function CheckContent() {
 
      try {
         // 1. Save Stock Counts (Inventory Take)
-        const stockUpdates = items.map(item => {
+        const stockUpdates = items.map(async (item) => {
+            // If Editing: Only update items that were modified by the user
+            if (editId && !item.isModified) {
+                return;
+            }
+
             const current = parseFloat(item.currentStock);
             if (!isNaN(current)) {
                 // If user entered a number, we update the master stock record
                 const stockRef = doc(db, "stocks", `${activeBranchId}_${item.productId}`);
-                return setDoc(stockRef, {
+                await setDoc(stockRef, {
                     branchId: activeBranchId,
                     productId: item.productId,
                     productName: item.product.name, // helpful for debugging
-                    amount: current,
+                    amount: current, // No rounding, saves exact float
                     updatedAt: Timestamp.now()
                 }, { merge: true });
             }
-            return Promise.resolve();
         });
         
         await Promise.all(stockUpdates);
@@ -486,6 +535,7 @@ function CheckContent() {
                       <input 
                           type="number"
                           inputMode="decimal"
+                          step="any"
                           className="w-12 text-center text-sm font-bold bg-transparent outline-none text-gray-600"
                           value={item.minStock}
                           onChange={(e) => handleMinStockChange(item.productId, e.target.value)}
@@ -514,6 +564,7 @@ function CheckContent() {
                        <input 
                            type="number"
                            inputMode="decimal"
+                           step="any"
                            className="w-4/6 h-14 text-center text-3xl font-bold border border-blue-300 rounded-2xl focus:ring-4 focus:ring-green-100 focus:border-green-500 shadow-inner bg-white text-gray-800"
                            value={item.currentStock}
                            onChange={(e) => handleCurrentChange(item.productId, e.target.value)}
@@ -546,7 +597,7 @@ function CheckContent() {
                                  const newVal = Math.max(0, (item.toOrder || 0) - 1);
                                  // Sync
                                  if (activeBranchId && !editId) saveDraftItem(activeBranchId, item.productId, { toOrder: newVal });
-                                 setItems(prev => prev.map(i => i.productId === item.productId ? { ...i, toOrder: newVal } : i));
+                                 setItems(prev => prev.map(i => i.productId === item.productId ? { ...i, toOrder: newVal, isModified: true } : i));
                              }}
                              className={`h-10 w-1/6 rounded-lg border flex items-center justify-center transition-all active:scale-95 ${item.toOrder > 0 ? "border-red-200 bg-white text-red-600" : "border-gray-200 bg-white text-gray-400"}`}
                            >
@@ -556,13 +607,14 @@ function CheckContent() {
                            <input
                                type="number"
                                inputMode="decimal"
+                               step="any"
                                className={`flex-1 h-10 w-4/6 text-center font-bold rounded-lg border-2 focus:ring-2 focus:ring-red-100 focus:border-red-400 ${item.toOrder > 0 ? "text-red-600 border-red-200 bg-white text-xl" : "text-gray-400 border-gray-200 bg-gray-50/50"}`}
                                value={item.toOrder === 0 ? '' : item.toOrder}
                                onChange={(e) => {
                                    const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
                                    // Sync
                                    if (activeBranchId && !editId) saveDraftItem(activeBranchId, item.productId, { toOrder: val });
-                                   setItems(prev => prev.map(i => i.productId === item.productId ? { ...i, toOrder: val } : i));
+                                   setItems(prev => prev.map(i => i.productId === item.productId ? { ...i, toOrder: val, isModified: true } : i));
                                }}
                                placeholder="0"
                            />
@@ -572,7 +624,7 @@ function CheckContent() {
                                  const newVal = (item.toOrder || 0) + 1;
                                  // Sync
                                  if (activeBranchId && !editId) saveDraftItem(activeBranchId, item.productId, { toOrder: newVal });
-                                 setItems(prev => prev.map(i => i.productId === item.productId ? { ...i, toOrder: newVal } : i));
+                                 setItems(prev => prev.map(i => i.productId === item.productId ? { ...i, toOrder: newVal, isModified: true } : i));
                              }}
                              className={`h-10 w-1/6 rounded-lg border flex items-center justify-center transition-all active:scale-95 ${item.toOrder > 0 ? "border-red-200 bg-red-100 text-red-700" : "border-gray-200 bg-gray-100 text-gray-500 hover:bg-white"}`}
                            >

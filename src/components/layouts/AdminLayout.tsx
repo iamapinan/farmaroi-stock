@@ -40,7 +40,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
   return (
     <div className="flex h-screen bg-gray-100 overflow-hidden">
       {/* Mobile Header */}
-      <div className="md:hidden fixed top-0 w-full bg-white shadow-sm z-20 px-4 py-3 flex justify-between items-center">
+      <div className="md:hidden fixed top-0 w-full bg-white shadow-sm z-20 px-4 py-3 flex justify-between items-center print:hidden">
         <h1 className="font-bold text-green-700">Farm Aroi Admin</h1>
         <button onClick={() => setIsSidebarOpen(!isSidebarOpen)} className="p-2 text-gray-600">
           {isSidebarOpen ? <X /> : <Menu />}
@@ -50,14 +50,14 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       {/* Sidebar Overlay */}
       {isSidebarOpen && (
         <div 
-            className="md:hidden fixed inset-0 bg-black/50 z-30"
+            className="md:hidden fixed inset-0 bg-black/50 z-30 print:hidden"
             onClick={() => setIsSidebarOpen(false)}
         />
       )}
 
       {/* Sidebar */}
       <aside className={clsx(
-        "bg-white shadow-md flex flex-col fixed md:static inset-y-0 left-0 z-40 w-64 transform transition-transform duration-200 ease-in-out",
+        "bg-white shadow-md flex flex-col fixed md:static inset-y-0 left-0 z-40 w-64 transform transition-transform duration-200 ease-in-out print:hidden",
         isSidebarOpen ? "translate-x-0" : "-translate-x-full md:translate-x-0"
       )}>
         <div className="p-6 border-b max-md:mt-12">
@@ -106,7 +106,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       </aside>
 
       {/* Main Content */}
-      <main className="flex-1 overflow-auto p-4 md:p-8 pt-16 md:pt-8 w-full">
+      <main className="flex-1 overflow-auto p-4 md:p-8 pt-16 md:pt-8 w-full print:p-0 print:overflow-visible">
         {children}
       </main>
     </div>
