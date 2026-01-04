@@ -272,7 +272,12 @@ function CheckContent() {
         const minStock = configMap[p.id] ?? (p.minStock || 0);
         let toOrder = 0;
         if (currentQty !== undefined) {
-             toOrder = Math.max(0, minStock - currentQty);
+             const diff = minStock - currentQty;
+             if (currentQty <= minStock) {
+                 toOrder = Math.max(1, diff);
+             } else {
+                 toOrder = 0;
+             }
         }
 
         return {
@@ -288,8 +293,8 @@ function CheckContent() {
       initialItems.sort((a, b) => {
           const aCurrent = parseFloat(a.currentStock) || 0;
           const bCurrent = parseFloat(b.currentStock) || 0;
-          const aLow = aCurrent < a.minStock;
-          const bLow = bCurrent < b.minStock;
+          const aLow = aCurrent <= a.minStock;
+          const bLow = bCurrent <= b.minStock;
 
           if (aLow && !bLow) return -1;
           if (!aLow && bLow) return 1;
@@ -324,7 +329,12 @@ function CheckContent() {
         }
 
         const current = parseFloat(val);
-        const toOrder = Math.max(0, i.minStock - (isNaN(current) ? 0 : current));
+        const currentVal = isNaN(current) ? 0 : current;
+        let toOrder = 0;
+        const diff = i.minStock - currentVal;
+        if (currentVal <= i.minStock) {
+            toOrder = Math.max(1, diff);
+        }
         
         // Sync
         if (activeBranchId && !editId) {
@@ -342,7 +352,11 @@ function CheckContent() {
          if (i.productId === productId) {
              const currentVal = parseFloat(i.currentStock) || 0;
              const newVal = Math.max(0, currentVal + delta);
-             const toOrder = Math.max(0, i.minStock - newVal);
+             let toOrder = 0;
+             const diff = i.minStock - newVal;
+             if (newVal <= i.minStock) {
+                 toOrder = Math.max(1, diff);
+             }
 
              // Sync
              if (activeBranchId && !editId) {
