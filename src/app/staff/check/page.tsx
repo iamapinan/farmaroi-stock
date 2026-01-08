@@ -19,6 +19,7 @@ interface Product {
   unit: string;
   source: string;
   minStock?: number;
+  disableStockCheck?: boolean;
 }
 
 interface StockItem {
@@ -43,6 +44,7 @@ function CheckContent() {
   const [filterCategory, setFilterCategory] = useState("All");
   const [search, setSearch] = useState(""); // Add search state
   const [activeBranchId, setActiveBranchId] = useState<string | null>(null);
+  const [showFilters, setShowFilters] = useState(true);
 
   useEffect(() => {
     const init = async () => {
@@ -261,24 +263,15 @@ function CheckContent() {
       });
 
       // 4. Build Items State
-      const initialItems: StockItem[] = products.map(p => {
+      const initialItems: StockItem[] = products
+        .filter(p => !p.disableStockCheck) // Filter out disabled items
+        .map(p => {
         const currentQty = stockMap[p.id];
-        // If we have a record, show it. If undefined, leave empty to prompt check?
-        // User asked to "show latest", so we show what we have.
         const currentStockStr = currentQty !== undefined ? currentQty.toString() : "0";
-        
-        // Calculate initial toOrder based on this pre-filled stock?
-        // If we pre-fill, we should probably calc toOrder too if it's < minStock.
         const minStock = configMap[p.id] ?? (p.minStock || 0);
-        let toOrder = 0;
-        if (currentQty !== undefined) {
-             const diff = minStock - currentQty;
-             if (currentQty <= minStock) {
-                 toOrder = Math.max(1, diff);
-             } else {
-                 toOrder = 0;
-             }
-        }
+        
+        // Auto toOrder set to 0 as requested by user
+        const toOrder = 0;
 
         return {
             productId: p.id,
@@ -289,12 +282,13 @@ function CheckContent() {
         };
       });
 
-      // Sort: Low Stock First, then Alphabetical
+      // Sort: Low Stock First (Strictly Less Than Min), then Alphabetical
       initialItems.sort((a, b) => {
           const aCurrent = parseFloat(a.currentStock) || 0;
           const bCurrent = parseFloat(b.currentStock) || 0;
-          const aLow = aCurrent <= a.minStock;
-          const bLow = bCurrent <= b.minStock;
+          // Updated Logic: Only treat as low stock if strictly LESS than minStock
+          const aLow = aCurrent < a.minStock;
+          const bLow = bCurrent < b.minStock;
 
           if (aLow && !bLow) return -1;
           if (!aLow && bLow) return 1;
@@ -312,9 +306,6 @@ function CheckContent() {
   };
 
   const handleMinStockChange = (productId: string, val: string) => {
-    // If val is empty, we set to 0 to comply with "show 0". 
-    // However, to allow typing, maybe we need to treat it carefully.
-    // But since user asked specifically for "if none, show 0", defaulting to 0 is main goal.
     const num = val === "" ? 0 : parseFloat(val);
     setItems(items.map(i => i.productId === productId ? { ...i, minStock: isNaN(num) ? 0 : num } : i));
   };
@@ -324,24 +315,22 @@ function CheckContent() {
       if (i.productId === productId) {
         // Allow empty string for backspace
         if (val === "") {
-             if (activeBranchId && !editId) saveDraftItem(activeBranchId, productId, { currentStock: "", toOrder: i.minStock }); // Sync empty
-             return { ...i, currentStock: "", toOrder: i.minStock };
+             if (activeBranchId && !editId) saveDraftItem(activeBranchId, productId, { currentStock: "", toOrder: i.toOrder }); // Sync empty
+             return { ...i, currentStock: "", isModified: true };
         }
 
         const current = parseFloat(val);
-        const currentVal = isNaN(current) ? 0 : current;
-        let toOrder = 0;
-        const diff = i.minStock - currentVal;
-        if (currentVal <= i.minStock) {
-            toOrder = Math.max(1, diff);
-        }
+        // Do not auto-calculate toOrder. Keep existing value.
+        // const currentVal = isNaN(current) ? 0 : current;
+        // let toOrder = 0;
+        // ... logic removed
         
         // Sync
         if (activeBranchId && !editId) {
-            saveDraftItem(activeBranchId, productId, { currentStock: val, toOrder });
+            saveDraftItem(activeBranchId, productId, { currentStock: val, toOrder: i.toOrder });
         }
 
-        return { ...i, currentStock: val, toOrder, isModified: true };
+        return { ...i, currentStock: val, toOrder: i.toOrder, isModified: true };
       }
       return i;
     }));
@@ -352,18 +341,15 @@ function CheckContent() {
          if (i.productId === productId) {
              const currentVal = parseFloat(i.currentStock) || 0;
              const newVal = Math.max(0, currentVal + delta);
-             let toOrder = 0;
-             const diff = i.minStock - newVal;
-             if (newVal <= i.minStock) {
-                 toOrder = Math.max(1, diff);
-             }
+             
+             // Do not auto-calculate toOrder. Keep existing value.
 
              // Sync
              if (activeBranchId && !editId) {
-                saveDraftItem(activeBranchId, productId, { currentStock: newVal.toString(), toOrder });
+                saveDraftItem(activeBranchId, productId, { currentStock: newVal.toString(), toOrder: i.toOrder });
              }
 
-             return { ...i, currentStock: newVal.toString(), toOrder, isModified: true };
+             return { ...i, currentStock: newVal.toString(), toOrder: i.toOrder, isModified: true };
          }
          return i;
      }));
@@ -477,180 +463,225 @@ function CheckContent() {
   });
 
   return (
-    <div className="space-y-4 pb-20 relative">
-        <div className="sticky top-[-20px] bg-gray-50 pt-2 pb-4 z-20 space-y-4 -mx-4 px-4 border-b border-gray-200 shadow-sm">
-            <div className="flex justify-between items-center">
-                <h2 className="text-xl font-bold text-gray-800">Daily Stock Check</h2>
+    <div className="space-y-4 pb-24 relative">
+        {/* Enhanced Sticky Header with Toggle */}
+        <div className="sticky top-[-20px] bg-gradient-to-br from-gray-50 to-gray-100 z-20 -mx-4 px-4 border-b-2 border-gray-200 shadow-md">
+            {/* Toggle Button */}
+            <div className="flex justify-center pt-1 pb-2">
+              <button
+                onClick={() => setShowFilters(!showFilters)}
+                className="px-4 py-1 bg-white/80 backdrop-blur-sm border border-gray-200 rounded-full text-xs font-medium text-gray-600 hover:bg-white hover:border-green-300 transition-all active:scale-95 shadow-sm"
+              >
+                {showFilters ? "ซ่อนตัวกรอง ▲" : "แสดงตัวกรอง ▼"}
+              </button>
             </div>
 
+            {/* Collapsible Content */}
+            <div className={`overflow-hidden transition-all duration-300 ${showFilters ? 'max-h-96 opacity-100 pb-4' : 'max-h-0 opacity-0'}`}>
+              <div className="space-y-4">
+                <div>
+                  <h2 className="text-2xl font-bold text-gray-900">เช็คสต๊อกวันนี้</h2>
+                  <p className="text-sm text-gray-500 mt-0.5">{new Date().toLocaleDateString('th-TH', { 
+                    weekday: 'long', 
+                    year: 'numeric', 
+                    month: 'long', 
+                    day: 'numeric' 
+                  })}</p>
+                </div>
 
-            {/* Search Input */}
-            <div className="relative">
-                <Search className="absolute left-3 top-2.5 h-5 w-5 text-gray-400" />
-                <input
-                    type="text"
-                    placeholder="ค้นหาสินค้า..."
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="pl-10 w-full border border-gray-300 rounded-lg py-2 focus:ring-green-500 focus:border-green-500 shadow-sm"
-                />
-            </div>
+                {/* Search Input */}
+                <div className="relative">
+                    <Search className="absolute left-4 top-3.5 h-5 w-5 text-gray-400" />
+                    <input
+                        type="text"
+                        placeholder="ค้นหาสินค้า..."
+                        value={search}
+                        onChange={(e) => setSearch(e.target.value)}
+                        className="pl-12 w-full bg-white border-2 border-gray-200 rounded-xl py-3 text-base focus:ring-2 focus:ring-green-500 focus:border-green-500 shadow-sm transition-all"
+                    />
+                </div>
 
-            {/* Filter */}
-            <div className="flex gap-2 overflow-x-auto pb-2 no-scrollbar">
-                <button
-                    onClick={() => setFilterCategory("All")}
-                    className={`px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-colors ${filterCategory === "All" ? "bg-green-600 text-white shadow-md" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"}`}
-                >
-                    ทั้งหมด
-                </button>
-                {categories.map(c => (
+                {/* Filter Pills */}
+                <div className="flex gap-2 overflow-x-auto pb-2 scrollbar-hide">
                     <button
-                        key={c}
-                        onClick={() => setFilterCategory(c)}
-                        className={`px-4 py-2 rounded-full whitespace-nowrap text-sm font-medium transition-colors ${filterCategory === c ? "bg-green-600 text-white shadow-md" : "bg-white border border-gray-200 text-gray-600 hover:bg-gray-50"}`}
+                        onClick={() => setFilterCategory("All")}
+                        className={`px-4 py-2 rounded-xl whitespace-nowrap text-sm font-medium transition-all ${
+                          filterCategory === "All" 
+                            ? "bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-md" 
+                            : "bg-white border-2 border-gray-200 text-gray-600 hover:border-green-300"
+                        }`}
                     >
-                        {c}
+                        ทั้งหมด
                     </button>
-                ))}
+                    {categories.map(c => (
+                        <button
+                            key={c}
+                            onClick={() => setFilterCategory(c)}
+                            className={`px-4 py-2 rounded-xl whitespace-nowrap text-sm font-medium transition-all ${
+                              filterCategory === c 
+                                ? "bg-gradient-to-r from-emerald-500 to-green-600 text-white shadow-md" 
+                                : "bg-white border-2 border-gray-200 text-gray-600 hover:border-green-300"
+                            }`}
+                        >
+                            {c}
+                        </button>
+                    ))}
+                </div>
+              </div>
             </div>
         </div>
-        <div className="flex justify-between items-center mb-4">
-    <h1 className="text-xl font-bold text-gray-900">เช็คสต๊อกวันนี้</h1>
-    <div className="text-sm text-gray-500">
-        {new Date().toLocaleDateString('th-TH')}
-    </div>
+
+
+  <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+    {filteredItems.map((item) => {
+      const current = parseFloat(item.currentStock) || 0;
+      const isLow = current < item.minStock;
+      const hasOrder = item.toOrder > 0;
+      
+      return (
+        <div 
+            key={item.productId} 
+            className={`bg-white rounded-xl shadow-sm border-2 transition-all ${
+              isLow 
+                ? "border-amber-300 bg-amber-50/30" 
+                : hasOrder
+                  ? "border-green-300 bg-green-50/30"
+                  : "border-gray-200"
+            }`}
+        >
+            {/* Compact Header */}
+            <div className="p-3 border-b border-gray-100">
+                <div className="flex items-start justify-between gap-2">
+                    <div className="flex-1 min-w-0">
+                        <h3 className="font-bold text-gray-900 text-base leading-tight truncate">{item.product.name}</h3>
+                        <div className="flex items-center gap-1.5 mt-1">
+                            <span className="text-xs px-2 py-0.5 rounded-full bg-gray-100 text-gray-600 font-medium">
+                               {item.product.category}
+                            </span>
+                            {isLow && (
+                              <span className="text-xs px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 font-bold">
+                                ⚠️ ต่ำ
+                              </span>
+                            )}
+                        </div>
+                    </div>
+                    
+                    {/* Min Stock Badge */}
+                    <div className="flex flex-col items-end">
+                        <span className="text-[10px] text-gray-400 uppercase font-bold">Min</span>
+                        <span className="text-lg font-bold text-gray-700">{item.minStock}</span>
+                    </div>
+                </div>
+            </div>
+
+            {/* Main Content - Compact Grid */}
+            <div className="p-3 space-y-2">
+                
+                {/* Current Stock Entry */}
+                <div>
+                    <label className="text-xs font-bold text-blue-600 mb-1.5 block text-center uppercase">
+                      ของที่มีอยู่ <span className="text-xs text-gray-500 font-medium">({item.product.unit})</span>
+                    </label>
+                    <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => adjustStock(item.productId, -1)}
+                          className="h-12 w-12 rounded-lg bg-gradient-to-br from-red-50 to-orange-50 border-2 border-red-200 flex items-center justify-center text-red-600 active:scale-95 transition-all shadow-sm"
+                        >
+                            <Minus className="w-5 h-5" />
+                        </button>
+                        <input 
+                            type="number"
+                            inputMode="decimal"
+                            className={`flex-1 h-12 text-center text-2xl font-bold border-2 rounded-lg focus:ring-2 focus:ring-blue-300 shadow-sm ${
+                              current < item.minStock 
+                                ? "border-amber-300 bg-amber-50 text-amber-900" 
+                                : "border-blue-300 bg-blue-50 text-blue-900"
+                            }`}
+                            value={item.currentStock}
+                            onChange={(e) => handleCurrentChange(item.productId, e.target.value)}
+                            onFocus={(e) => e.target.select()} 
+                            placeholder="0"
+                        />
+                        <button 
+                          onClick={() => adjustStock(item.productId, 1)}
+                          className="h-12 w-12 rounded-lg bg-gradient-to-br from-green-50 to-emerald-50 border-2 border-green-300 flex items-center justify-center text-green-700 active:scale-95 transition-all shadow-sm"
+                        >
+                            <Plus className="w-5 h-5" />
+                        </button>
+                    </div>
+                </div>
+
+                {/* To Order Entry */}
+                <div className={`p-2.5 rounded-lg border-2 transition-all ${
+                  hasOrder 
+                    ? "bg-green-50 border-green-300" 
+                    : "bg-gray-50 border-gray-200 border-dashed"
+                }`}>
+                    <div className="flex justify-between items-center mb-1.5">
+                        <label className={`text-xs font-bold uppercase ${
+                          hasOrder ? "text-green-700" : "text-gray-500"
+                        }`}>
+                           ต้องสั่ง
+                        </label>
+                        <span className="text-xs text-gray-500 font-medium">{item.product.unit}</span>
+                    </div>
+                    
+                    <div className="flex items-center gap-2">
+                        <button 
+                          onClick={() => {
+                              const newVal = Math.max(0, (item.toOrder || 0) - 1);
+                              if (activeBranchId && !editId) saveDraftItem(activeBranchId, item.productId, { toOrder: newVal });
+                              setItems(prev => prev.map(i => i.productId === item.productId ? { ...i, toOrder: newVal, isModified: true } : i));
+                          }}
+                          className={`h-10 w-10 rounded-lg border-2 flex items-center justify-center transition-all active:scale-95 ${
+                            hasOrder 
+                              ? "border-red-300 bg-white text-red-600" 
+                              : "border-gray-200 bg-white text-gray-400"
+                          }`}
+                        >
+                            <Minus className="w-4 h-4" />
+                        </button>
+
+                        <input
+                            type="number"
+                            inputMode="decimal"
+                            className={`flex-1 h-10 text-center font-bold rounded-lg border-2 focus:ring-2 transition-all ${
+                              hasOrder 
+                                ? "text-green-700 border-green-300 bg-white text-lg focus:ring-green-200" 
+                                : "text-gray-400 border-gray-200 bg-gray-50/50 focus:ring-gray-200"
+                            }`}
+                            value={item.toOrder === 0 ? '' : item.toOrder}
+                            onChange={(e) => {
+                                const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
+                                if (activeBranchId && !editId) saveDraftItem(activeBranchId, item.productId, { toOrder: val });
+                                setItems(prev => prev.map(i => i.productId === item.productId ? { ...i, toOrder: val, isModified: true } : i));
+                            }}
+                            placeholder="0"
+                        />
+
+                        <button 
+                          onClick={() => {
+                              const newVal = (item.toOrder || 0) + 1;
+                              if (activeBranchId && !editId) saveDraftItem(activeBranchId, item.productId, { toOrder: newVal });
+                              setItems(prev => prev.map(i => i.productId === item.productId ? { ...i, toOrder: newVal, isModified: true } : i));
+                          }}
+                          className={`h-10 w-10 rounded-lg border-2 flex items-center justify-center transition-all active:scale-95 ${
+                            hasOrder 
+                              ? "border-green-300 bg-gradient-to-br from-green-50 to-emerald-50 text-green-700" 
+                              : "border-gray-300 bg-gradient-to-br from-gray-50 to-gray-100 text-gray-600"
+                          }`}
+                        >
+                            <Plus className="w-4 h-4" />
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </div>
+      );
+    })}
   </div>
 
-  <div className="space-y-4">
-    {filteredItems.map((item) => (
-      <div 
-          key={item.productId} 
-          className="bg-white p-4 rounded-2xl shadow-sm border border-gray-100 flex flex-col gap-3 focus-within:ring-2 focus-within:ring-green-500 focus-within:bg-green-50 transition-all duration-200"
-      >
-          {/* Header Row */}
-          <div className="flex justify-between items-start">
-               <div>
-                   <h3 className="font-bold text-gray-900 text-lg leading-snug">{item.product.name}</h3>
-                   <div className="flex items-center gap-2 mt-1">
-                       <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-gray-100 text-gray-600">
-                          {item.product.category}
-                       </span>
-                       <span className="text-xs text-gray-400">
-                          {item.product.source}
-                       </span>
-                   </div>
-               </div>
-               
-               {/* Min Stock (Secondary Info) */}
-               <div className="flex flex-col items-end">
-                   <span className="text-[10px] text-gray-400 uppercase tracking-wider font-bold mb-1">ขั้นต่ำ (Min)</span>
-                   <div className="flex items-center bg-gray-50 rounded-lg p-1 border border-gray-100">
-                      <input 
-                          type="number"
-                          inputMode="decimal"
-                          step="any"
-                          className="w-12 text-center text-sm font-bold bg-transparent outline-none text-gray-600"
-                          value={item.minStock}
-                          onChange={(e) => handleMinStockChange(item.productId, e.target.value)}
-                          onBlur={() => saveMinStock(item)}
-                      />
-                   </div>
-               </div>
-          </div>
-
-
-          {/* Main Controls Row (Full Width) */}
-          <div className="pt-2 border-t border-gray-100/50 space-y-4">
-              
-              {/* Row 1: Current Stock (Primary Action) */}
-              <div>
-                  <label className="text-xs font-bold text-gray-500 mb-2 block uppercase tracking-wide text-center">
-                    ของที่มีอยู่ (Current)
-                  </label>
-                  <div className="flex items-center gap-3">
-                       <button 
-                         onClick={() => adjustStock(item.productId, -1)}
-                         className="h-14 w-1/6 rounded-2xl border border-orange-200 bg-white shadow-sm flex items-center justify-center text-gray-600 active:bg-gray-100 active:scale-95 transition-all touch-manipulation"
-                       >
-                           <Minus className="w-6 h-6" />
-                       </button>
-                       <input 
-                           type="number"
-                           inputMode="decimal"
-                           step="any"
-                           className="w-4/6 h-14 text-center text-3xl font-bold border border-blue-300 rounded-2xl focus:ring-4 focus:ring-green-100 focus:border-green-500 shadow-inner bg-white text-gray-800"
-                           value={item.currentStock}
-                           onChange={(e) => handleCurrentChange(item.productId, e.target.value)}
-                           onFocus={(e) => e.target.select()} 
-                           placeholder="0"
-                       />
-                       <button 
-                         onClick={() => adjustStock(item.productId, 1)}
-                         className="h-14 w-1/6 rounded-2xl border border-green-200 bg-green-50 shadow-sm flex items-center justify-center text-green-700 active:bg-green-100 active:scale-95 transition-all touch-manipulation"
-                       >
-                           <Plus className="w-6 h-6" />
-                       </button>
-                  </div>
-              </div>
-
-              {/* Row 2: To Order (Secondary Action) */}
-              <div className={`p-4 rounded-xl border-2 transition-all ${item.toOrder > 0 ? "bg-orange-50 border-orange-600" : "bg-gray-80 border-gray-100 border-dashed"}`}>
-                  <div className="flex flex-col gap-2">
-                      <div className="flex justify-between items-center">
-                          <label className={`text-sm font-bold flex items-center gap-2 ${item.toOrder > 0 ? "text-gray-700" : "text-gray-400"}`}>
-                             <div className={`w-2 h-2 rounded-full ${item.toOrder > 0 ? "bg-gray-800 animate-pulse" : "bg-gray-300"}`}></div>
-                             ต้องสั่งเพิ่ม (To Order)
-                          </label>
-                          <span className="text-md text-gray-600 font-medium">{item.product.unit}</span>
-                      </div>
-                      
-                      <div className="flex items-center gap-2">
-                           <button 
-                             onClick={() => {
-                                 const newVal = Math.max(0, (item.toOrder || 0) - 1);
-                                 // Sync
-                                 if (activeBranchId && !editId) saveDraftItem(activeBranchId, item.productId, { toOrder: newVal });
-                                 setItems(prev => prev.map(i => i.productId === item.productId ? { ...i, toOrder: newVal, isModified: true } : i));
-                             }}
-                             className={`h-10 w-1/6 rounded-lg border flex items-center justify-center transition-all active:scale-95 ${item.toOrder > 0 ? "border-red-200 bg-white text-red-600" : "border-gray-200 bg-white text-gray-400"}`}
-                           >
-                               <Minus className="w-6 h-6" />
-                           </button>
-
-                           <input
-                               type="number"
-                               inputMode="decimal"
-                               step="any"
-                               className={`flex-1 h-10 w-4/6 text-center font-bold rounded-lg border-2 focus:ring-2 focus:ring-red-100 focus:border-red-400 ${item.toOrder > 0 ? "text-red-600 border-red-200 bg-white text-xl" : "text-gray-400 border-gray-200 bg-gray-50/50"}`}
-                               value={item.toOrder === 0 ? '' : item.toOrder}
-                               onChange={(e) => {
-                                   const val = e.target.value === '' ? 0 : parseFloat(e.target.value);
-                                   // Sync
-                                   if (activeBranchId && !editId) saveDraftItem(activeBranchId, item.productId, { toOrder: val });
-                                   setItems(prev => prev.map(i => i.productId === item.productId ? { ...i, toOrder: val, isModified: true } : i));
-                               }}
-                               placeholder="0"
-                           />
-
-                           <button 
-                             onClick={() => {
-                                 const newVal = (item.toOrder || 0) + 1;
-                                 // Sync
-                                 if (activeBranchId && !editId) saveDraftItem(activeBranchId, item.productId, { toOrder: newVal });
-                                 setItems(prev => prev.map(i => i.productId === item.productId ? { ...i, toOrder: newVal, isModified: true } : i));
-                             }}
-                             className={`h-10 w-1/6 rounded-lg border flex items-center justify-center transition-all active:scale-95 ${item.toOrder > 0 ? "border-red-200 bg-red-100 text-red-700" : "border-gray-200 bg-gray-100 text-gray-500 hover:bg-white"}`}
-                           >
-                               <Plus className="w-6 h-6" />
-                           </button>
-                      </div>
-                  </div>
-              </div>
-          </div>
-      </div>
-    ))}
-
+  <div>
     {filteredItems.length === 0 && !loading && (
         <div className="p-10 text-center text-gray-400">
             <Search className="w-12 h-12 mx-auto mb-2 opacity-20" />
@@ -661,14 +692,19 @@ function CheckContent() {
 
   <div className="h-20"></div> {/* Spacer */}
 
-  <div className="fixed bottom-16 left-0 w-full bg-white border-t p-4 flex justify-between items-center shadow-lg">
-      <div className="text-sm">
-          <span className="font-bold text-red-600">{items.filter(i => i.toOrder > 0).length}</span> รายการที่ต้องสั่ง
+  <div className="fixed bottom-16 left-0 w-full bg-white border-t border-gray-200 shadow-xl shadow-top p-4 mb-2 flex justify-between items-center shadow-lg">
+      <div className="text-xl">
+          <span className="font-bold text-red-600">
+            {items.filter(i => {
+                const current = parseFloat(i.currentStock) || 0;
+                return current < i.minStock;
+            }).length}
+          </span> รายการที่ต้องสั่ง (ต่ำกว่าขั้นต่ำ)
       </div>
       <button 
         onClick={handleSubmit}
         disabled={submitting}
-        className="bg-green-600 text-white font-bold py-2 px-6 rounded-full shadow-md hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
+        className="bg-green-600 text-white font-bold py-2 px-6 w-1/2 rounded-full shadow-md hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
       >
          {submitting ? "กำลังบันทึก..." : "สรุปรายการสั่งซื้อ"}
       </button>

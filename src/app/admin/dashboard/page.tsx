@@ -1,9 +1,9 @@
-
 "use client";
 
 import AdminLayout from "@/components/layouts/AdminLayout";
 import AdminGuard from "@/components/auth/AdminGuard";
 
+import Link from "next/link";
 import { useEffect, useState } from "react";
 import { collection, getCountFromServer, query, where, getDocs, orderBy } from "firebase/firestore"; // getCountFromServer is efficient but costs 1 read per 1000 index entries. simple getDocs.length is fine for small apps.
 import { db } from "@/lib/firebase/config";
@@ -254,9 +254,9 @@ export default function AdminDashboard() {
               {/* Purchase History */}
               <div className="bg-white p-6 rounded-xl shadow-sm border border-gray-100">
                   <div className="flex justify-between items-center mb-4">
-                      <h3 className="font-bold text-lg text-gray-800 flex items-center gap-2">
+                      <Link href="/admin/reports" className="font-bold text-lg text-gray-800 flex items-center gap-2 hover:text-green-600">
                            ประวัติการสั่งซื้อ
-                      </h3>
+                      </Link>
                       {/* Time View Toggles */}
                       <div className="flex bg-gray-100 rounded-lg p-1">
                           <button 

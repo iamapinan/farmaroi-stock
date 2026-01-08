@@ -6,6 +6,7 @@ import { useState, useEffect } from "react";
 import { collection, getDocs, orderBy, query, where, Timestamp } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { Printer, FileText, History, Filter } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 interface Product {
   id: string;
@@ -39,6 +40,7 @@ export default function ReportsPage() {
   const [loading, setLoading] = useState(true);
   const [branches, setBranches] = useState<any[]>([]);
   const [selectedBranch, setSelectedBranch] = useState("All");
+  const router = useRouter();
   
   // Data
   const [products, setProducts] = useState<Product[]>([]);
@@ -98,6 +100,14 @@ export default function ReportsPage() {
         setStocks(stockList);
 
         // Transactions
+        // Filter type 'in' only? Or all? User said "Purchase History" so likely type='in'. But code showed all.
+        // User request: "admin report purchase history...". Usually means stock in. 
+        // Previously it was showing all transactions including check? No, the code showed type='in' ? 'รับเข้า' : 'ตรวจนับ'.
+        // I will keep showing all but filter? Or just assume it shows everything.
+        // But for "Purchase History detail", the detail page is `TransactionDetail` which is designed for Stock In (shows Price).
+        // Check transactions probably don't have Price.
+        // Let's check logic: if type is 'check', does it have items with price? NO.
+        // So I should only allow clicking on type='in'.
         const tSnap = await getDocs(query(collection(db, "stock_transactions"), orderBy("date", "desc")));
         setTransactions(tSnap.docs.map(d => ({ id: d.id, ...d.data() } as Transaction)));
 
@@ -219,7 +229,7 @@ export default function ReportsPage() {
                        className="bg-blue-600 text-white px-4 py-2 rounded-lg shadow hover:bg-blue-700 flex items-center gap-2"
                      >
                          <Printer className="w-4 h-4" />
-                         พิมพ์รายงาน
+                         พิมพ์ใบเสร็จ
                      </button>
                 </div>
             </div>
@@ -302,7 +312,17 @@ export default function ReportsPage() {
                                 {filteredTransactions.length === 0 ? (
                                     <tr><td colSpan={5} className="py-8 text-center text-gray-400">ไม่พบประวัติการทำรายการ</td></tr>
                                 ) : filteredTransactions.map((t) => (
-                                    <tr key={t.id} className="hover:bg-gray-50 print:hover:bg-transparent break-inside-avoid">
+                                    <tr 
+                                      key={t.id} 
+                                      className="hover:bg-gray-50 print:hover:bg-transparent break-inside-avoid cursor-pointer"
+                                      onClick={() => {
+                                          if (t.type === 'in') {
+                                              router.push(`/admin/reports/transaction/${t.id}`);
+                                          } else {
+                                              alert('รายละเอียดมีเฉพาะรายการรับเข้า (Stock In)');
+                                          }
+                                      }}
+                                    >
                                         <td className="py-3 px-4 text-gray-500 whitespace-nowrap print:py-1">
                                             {t.date ? new Date(t.date.seconds * 1000).toLocaleDateString('th-TH', { year: '2-digit', month: 'short', day: 'numeric', hour: '2-digit', minute:'2-digit' }) : '-'}
                                         </td>

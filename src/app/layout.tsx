@@ -1,11 +1,11 @@
 
 import type { Metadata, Viewport } from "next";
-import { Inter } from "next/font/google"; // Use Inter as a standard font, or prompt for something else
+import { Noto_Sans_Thai } from "next/font/google";
 import "./globals.css";
 import { AuthProvider } from "@/lib/firebase/context";
 import SWRegister from "@/components/SWRegister";
 
-const inter = Inter({ subsets: ["latin"] });
+const notoSansThai = Noto_Sans_Thai({ subsets: ["thai", "latin"] });
 
 export const metadata: Metadata = {
   title: "Farm Aroi Stock",
@@ -34,7 +34,7 @@ export default function RootLayout({
 }>) {
   return (
     <html lang="en">
-      <body className={inter.className}>
+      <body className={notoSansThai.className}>
         <AuthProvider>{children}</AuthProvider>
         <SWRegister />
       </body>

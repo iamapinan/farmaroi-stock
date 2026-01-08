@@ -7,6 +7,7 @@ import { useEffect, useState } from "react";
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { Plus, Pencil, Trash, X, Search } from "lucide-react";
+import { useMasterData } from "@/hooks/useMasterData";
 
 interface Product {
   id: string;
@@ -15,9 +16,8 @@ interface Product {
   unit: string;
   source: string;
   minStock?: number;
+  disableStockCheck?: boolean;
 }
-
-import { useMasterData } from "@/hooks/useMasterData";
 
 export default function ProductsPage() {
   const { categories, units, sources, loading: masterLoading } = useMasterData();
@@ -33,7 +33,8 @@ export default function ProductsPage() {
     category: "",
     unit: "",
     source: "",
-    minStock: "", // Use string for input handling
+    minStock: "",
+    disableStockCheck: false,
   });
 
   // Effect to set defaults once master data loads
@@ -75,16 +76,18 @@ export default function ProductsPage() {
         category: product.category,
         unit: product.unit,
         source: product.source,
-        minStock: product.minStock?.toString() || "", // Convert to string for input handling
+        minStock: product.minStock?.toString() || "",
+        disableStockCheck: product.disableStockCheck || false,
       });
     } else {
       setEditingProduct(null);
       setFormData({
         name: "",
-        category: categories[0], // Use new categories
+        category: categories[0],
         unit: "",
-        source: sources[0], // Use new sources
-        minStock: "", // Use string for input handling
+        source: sources[0],
+        minStock: "",
+        disableStockCheck: false,
       });
     }
     setIsModalOpen(true);
@@ -95,12 +98,13 @@ export default function ProductsPage() {
     setEditingProduct(null);
   };
 
-  const handleSubmit = async (e: React.FormEvent) => { // Renamed from handleSubmit to handleSave in instruction, but keeping handleSubmit for consistency with original code structure
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
       const dataToSave = {
         ...formData,
-        minStock: formData.minStock ? Number(formData.minStock) : 0
+        minStock: formData.minStock ? Number(formData.minStock) : 0,
+        disableStockCheck: formData.disableStockCheck
       };
 
       if (editingProduct) {
@@ -140,11 +144,7 @@ export default function ProductsPage() {
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
             <h1 className="text-2xl font-bold text-gray-900">จัดการสินค้า</h1>
             <button
-              onClick={() => {
-                setEditingProduct(null);
-                setFormData({ name: "", category: categories[0], unit: "", source: sources[0], minStock: "" });
-                setIsModalOpen(true);
-              }}
+              onClick={() => handleOpenModal()}
               className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 flex items-center"
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -189,8 +189,11 @@ export default function ProductsPage() {
               </thead>
               <tbody className="bg-white divide-y divide-gray-200">
                 {filteredProducts.map((product) => (
-                  <tr key={product.id}>
-                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">{product.name}</td>
+                  <tr key={product.id} className={product.disableStockCheck ? "bg-gray-50 opacity-60" : ""}>
+                    <td className="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                        {product.name}
+                        {product.disableStockCheck && <span className="ml-2 text-xs text-red-500 bg-red-50 px-2 py-0.5 rounded-full border border-red-100">Hidden</span>}
+                    </td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.category}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.unit}</td>
                     <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-500">{product.source}</td>
@@ -213,7 +216,7 @@ export default function ProductsPage() {
                 ))}
                 {filteredProducts.length === 0 && !loading && (
                     <tr>
-                        <td colSpan={5} className="px-6 py-4 text-center text-gray-500">ไม่พบสินค้า</td>
+                        <td colSpan={6} className="px-6 py-4 text-center text-gray-500">ไม่พบสินค้า</td>
                     </tr>
                 )}
               </tbody>
@@ -269,8 +272,6 @@ export default function ProductsPage() {
 
                 <div>
                   <label className="block text-sm font-medium text-gray-700">หน่วย (เช่น กก., ขวด)</label>
-                  {/* Use a datalist or creatable select? For now simple Select from Master Data + Custom if needed? 
-                      Requirement was to "manage units", so let's enforce selection from the list for consistency. */}
                   <select
                      value={formData.unit}
                      onChange={(e) => setFormData({...formData, unit: e.target.value})}
@@ -292,6 +293,19 @@ export default function ProductsPage() {
                   />
                   <p className="text-xs text-gray-500 mt-1">ค่านี้จะถูกใช้เป็นค่าเริ่มต้นสำหรับทุกสาขา</p>
                 </div>
+
+                <div className="flex items-center gap-2 pt-2 bg-gray-50 p-3 rounded-lg border border-gray-100">
+                       <input 
+                          type="checkbox"
+                          id="disableCheck"
+                          checked={formData.disableStockCheck}
+                          onChange={(e) => setFormData({...formData, disableStockCheck: e.target.checked})}
+                          className="w-4 h-4 text-green-600 rounded border-gray-300 focus:ring-green-500"
+                       />
+                       <label htmlFor="disableCheck" className="text-sm font-medium text-gray-900 cursor-pointer">
+                          ไม่ต้องนำมาเช็คสต๊อกรายวัน (Disable Stock Check)
+                       </label>
+                  </div>
 
                 <div className="flex justify-end gap-2 pt-4">
                   <button type="button" onClick={handleCloseModal} className="px-4 py-2 border rounded-md text-gray-700 hover:bg-gray-50">Cancel</button>

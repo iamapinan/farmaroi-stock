@@ -1,6 +1,6 @@
 "use client";
 
-import { collection, getDocs, doc, setDoc, increment, getDoc, updateDoc, addDoc, Timestamp } from "firebase/firestore";
+import { collection, getDocs, doc, setDoc, increment, getDoc, updateDoc, addDoc, Timestamp, query, where } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
 import { useAuth } from "@/lib/firebase/context";
 import { useParams, useRouter } from "next/navigation";
@@ -32,6 +32,7 @@ export default function PODetailPage() {
   const [branchName, setBranchName] = useState("");
   const [processing, setProcessing] = useState(false);
   const { connect, print, isConnected, isPrinting, error: btError } = useBluetoothPrinter();
+  const [linkedTransaction, setLinkedTransaction] = useState<any>(null);
   
   // Modal State
   const [showReceiveModal, setShowReceiveModal] = useState(false);
@@ -56,14 +57,25 @@ export default function PODetailPage() {
       const docRef = doc(db, "daily_checks", poId);
       const snapshot = await getDoc(docRef);
       if (snapshot.exists()) {
-         setData(snapshot.data());
-         // Fetch Branch Name if we have branchId
-         const bId = snapshot.data().branchId;
+         const poData = snapshot.data();
+         setData(poData);
+         
+         // Fetch Branch Name
+         const bId = poData.branchId;
          if (bId) {
              const bRef = doc(db, 'branches', bId);
              const bSnap = await getDoc(bRef);
              if (bSnap.exists()) {
                  setBranchName(bSnap.data().name);
+             }
+         }
+
+         // Fetch Linked Transaction if completed
+         if (poData.status === 'completed') {
+             const q = query(collection(db, "stock_transactions"), where("refPO", "==", poId));
+             const tSnap = await getDocs(q);
+             if (!tSnap.empty) {
+                 setLinkedTransaction({ id: tSnap.docs[0].id, ...tSnap.docs[0].data() });
              }
          }
       }
@@ -81,6 +93,7 @@ export default function PODetailPage() {
   }, [id]);
 
 
+  /* handleOpenReceive: Initialize totalPrice */
   const handleOpenReceive = async () => {
        if (!data) return;
        setProcessing(true); 
@@ -100,7 +113,7 @@ export default function PODetailPage() {
                ...i,
                receiveQty: i.toOrder, 
                currentStock: stockMap[i.productId] || 0,
-               costPerUnit: 0 // Default cost
+               totalPrice: "" // User inputs Total Amount
            }));
            setReceiveItems(itemsToReceive);
            setShowReceiveModal(true);
@@ -144,7 +157,7 @@ export default function PODetailPage() {
             productSource: newProdData.source,
             receiveQty: 0,
             currentStock: customProductForm.currentStock ? Number(customProductForm.currentStock) : 0,
-            costPerUnit: 0,
+            totalPrice: 0, // Default total price
             isCustom: true
         };
         
@@ -162,6 +175,7 @@ export default function PODetailPage() {
     }
   };
 
+  /* confirmReceive: Use totalPrice */
   const confirmReceive = async () => {
       if (!data) return;
       const targetBranchId = data.branchId; 
@@ -187,10 +201,10 @@ export default function PODetailPage() {
               productId: i.productId,
               productName: i.productName,
               qty: parseFloat(i.receiveQty),
-              price: parseFloat(i.costPerUnit) || 0,
+              price: parseFloat(i.totalPrice) || 0, // Store Total Price
               unit: i.unit
             })),
-            totalCost: validItems.reduce((acc: number, i: any) => acc + (parseFloat(i.receiveQty) * (parseFloat(i.costPerUnit) || 0)), 0)
+            totalCost: validItems.reduce((acc: number, i: any) => acc + (parseFloat(i.totalPrice) || 0), 0)
           };
           await addDoc(collection(db, "stock_transactions"), transactionData);
 
@@ -222,7 +236,7 @@ export default function PODetailPage() {
                timestamp: new Date()
            });
            setShowSummaryModal(true);
-           loadData(id as string);
+           loadData(id as string); // Reload data to get new linked transaction
 
        } catch (error) {
            console.error("Error receiving stock:", error);
@@ -244,15 +258,75 @@ export default function PODetailPage() {
       window.print();
   };
 
+  /* Updated Bluetooth Print Logic */
   const handleBluetoothPrintOrder = async () => {
     if (!data) return;
     
-    // Auto-connect if not connected
+    // Auto-connect
     if (!isConnected) {
         const connected = await connect();
         if (!connected) return;
     }
 
+    // IF COMPLETED: Print Receipt (With Prices)
+    if (data.status === 'completed' && linkedTransaction) {
+        try {
+            const cmds: (number[] | Uint8Array)[] = [
+                PRINTER_COMMANDS.INIT,
+                PRINTER_COMMANDS.ALIGN_CENTER,
+                PRINTER_COMMANDS.BOLD_ON,
+                encodeToThai("Farm Aroi"), PRINTER_COMMANDS.LF,
+                PRINTER_COMMANDS.BOLD_OFF,
+                encodeToThai("ใบเสร็จรับเงิน / ใบรับสินค้า"), PRINTER_COMMANDS.LF, // Receipt / Stock In
+                encodeToThai(`สาขา: ${branchName}`), PRINTER_COMMANDS.LF,
+                encodeToThai(`วันที่: ${format(data.date?.toDate ? data.date.toDate() : new Date(), "dd/MM/yyyy HH:mm")}`), PRINTER_COMMANDS.LF,
+                encodeToThai(`Ref PO: ${id}`), PRINTER_COMMANDS.LF,
+                encodeToThai(`Ref Tx: ${linkedTransaction.id.substring(0,8)}...`), PRINTER_COMMANDS.LF,
+                encodeToThai(`ผู้ทำรายการ: ${data.user?.split('@')[0]}`), PRINTER_COMMANDS.LF,
+                PRINTER_COMMANDS.LF,
+                PRINTER_COMMANDS.ALIGN_LEFT
+            ];
+
+            linkedTransaction.items.forEach((item: any) => {
+                cmds.push(encodeToThai(`${item.productName}`));
+                cmds.push(PRINTER_COMMANDS.LF);
+                // Qty ... Price
+                const priceStr = item.price?.toLocaleString() || "0";
+                const line2 = `${item.qty} ${item.unit} = ${priceStr}`;
+                cmds.push(encodeToThai(`  ${line2}`));
+                cmds.push(PRINTER_COMMANDS.LF);
+            });
+            
+            cmds.push(PRINTER_COMMANDS.LF);
+            cmds.push(PRINTER_COMMANDS.ALIGN_RIGHT);
+            cmds.push(
+                PRINTER_COMMANDS.BOLD_ON,
+                encodeToThai(`รวมสุทธิ: ${linkedTransaction.totalCost?.toLocaleString() || "0"} บ.`),
+                PRINTER_COMMANDS.BOLD_OFF,
+                PRINTER_COMMANDS.LF
+            );
+
+            cmds.push(
+                PRINTER_COMMANDS.LF,
+                PRINTER_COMMANDS.LF,
+                PRINTER_COMMANDS.ALIGN_CENTER,
+                encodeToThai("................................"), PRINTER_COMMANDS.LF,
+                encodeToThai("ผู้รับสินค้า"), PRINTER_COMMANDS.LF,
+                PRINTER_COMMANDS.LF,
+                PRINTER_COMMANDS.LF,
+                PRINTER_COMMANDS.CUT 
+            );
+
+            await print(concatBuffers(cmds));
+
+        } catch (e) {
+            console.error("Print receipt failed", e);
+            alert("พิมพ์ใบเสร็จไม่สำเร็จ");
+        }
+        return;
+    }
+
+    // IF PENDING: Print Checklist (No Prices)
     try {
         const cmds: (number[] | Uint8Array)[] = [
             PRINTER_COMMANDS.INIT,
@@ -261,7 +335,7 @@ export default function PODetailPage() {
             encodeToThai("Farm Aroi"), PRINTER_COMMANDS.LF,
             PRINTER_COMMANDS.BOLD_OFF,
             PRINTER_COMMANDS.TEXT_SIZE_NORMAL,
-            encodeToThai("ใบสั่งซื้อของรายวัน"), PRINTER_COMMANDS.LF,
+            encodeToThai("ใบสั่งซื้อของรายวัน (Checklist)"), PRINTER_COMMANDS.LF,
             encodeToThai(`สาขา: ${branchName}`), PRINTER_COMMANDS.LF,
             encodeToThai(`${format(data.date?.toDate ? data.date.toDate() : new Date(), "dd/MM/yyyy HH:mm")}`), PRINTER_COMMANDS.LF,
              encodeToThai(`User: ${data.user?.split('@')[0]}`), PRINTER_COMMANDS.LF,
@@ -269,7 +343,7 @@ export default function PODetailPage() {
             PRINTER_COMMANDS.ALIGN_LEFT
         ];
 
-        // Group items logic reused from render
+        // Group items logic
         const grouped = data.items.reduce((acc: any, item: any) => {
             const source = item.source || item.productSource || 'General'; 
             if (!acc[source]) acc[source] = [];
@@ -285,11 +359,8 @@ export default function PODetailPage() {
              );
              
              items.forEach((item: any) => {
-                 // Format: [ ] ItemName ... Qty Unit
                  cmds.push(encodeToThai(`[ ] ${item.productName}`));
                  cmds.push(PRINTER_COMMANDS.LF);
-                 
-                 // Indent quantity
                  cmds.push(encodeToThai(`    x ${item.toOrder} ${item.unit}`));
                  cmds.push(PRINTER_COMMANDS.LF);
              });
@@ -299,8 +370,8 @@ export default function PODetailPage() {
         cmds.push(
             PRINTER_COMMANDS.LF,
             PRINTER_COMMANDS.LF,
-            PRINTER_COMMANDS.LF, // Feed
-            PRINTER_COMMANDS.CUT // Auto Cut
+            PRINTER_COMMANDS.LF, 
+            PRINTER_COMMANDS.CUT 
         );
 
         await print(concatBuffers(cmds));
@@ -310,7 +381,6 @@ export default function PODetailPage() {
         alert("พิมพ์ไม่สำเร็จ: " + e);
     }
   };
-
 
   const handleBluetoothPrintStockIn = async () => {
       if (!summaryData) return;
@@ -343,8 +413,8 @@ export default function PODetailPage() {
              cmds.push(encodeToThai(`${item.productName}`));
              cmds.push(PRINTER_COMMANDS.LF);
              
-             // Qty x Price = Total
-             const line2 = `${item.qty} ${item.unit} x ${item.price} = ${(item.qty * item.price).toLocaleString()}`;
+             // Qty = Total
+             const line2 = `${item.qty} ${item.unit} = ${item.price.toLocaleString()}`;
              cmds.push(encodeToThai(`  ${line2}`));
              cmds.push(PRINTER_COMMANDS.LF);
           });
@@ -388,7 +458,8 @@ export default function PODetailPage() {
   }, {});
 
   const dateStr = data.date ? format(data.date.toDate ? data.date.toDate() : new Date(data.date), "dd/MM/yyyy HH:mm") : "-";
-
+  
+  // Render Logic Update
   return (
     <StaffGuard>
         <div className="print:hidden">
@@ -449,7 +520,41 @@ export default function PODetailPage() {
                     </div>
 
                     <div className="space-y-6">
-                        {Object.entries(groupedItems).map(([source, items]) => (
+                        {/* Display Linked Transaction Items if Completed */}
+                        {linkedTransaction && (
+                             <div className="bg-white p-4 rounded-lg shadow-sm border border-green-200 bg-green-50 mb-4">
+                                <h2 className="font-bold text-lg text-green-800 mb-3 border-b border-green-200 pb-2">รายการที่ได้รับจริง (Stock In)</h2>
+                                <div className="overflow-x-auto">
+                                <table className="w-full text-sm text-left">
+                                    <thead className="bg-green-100 text-green-900 border-b border-green-200">
+                                        <tr>
+                                            <th className="py-2 px-3">สินค้า</th>
+                                            <th className="py-2 px-3 text-right">จำนวนรับ</th>
+                                            <th className="py-2 px-3 text-right">ราคา (รวม)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-green-100">
+                                        {linkedTransaction.items.map((item: any, idx: number) => (
+                                            <tr key={idx}>
+                                                <td className="py-2 px-3">{item.productName}</td>
+                                                <td className="py-2 px-3 text-right font-bold">{item.qty} {item.unit}</td>
+                                                <td className="py-2 px-3 text-right">{item.price?.toLocaleString() || 0}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot className="font-bold text-green-900 border-t border-green-200">
+                                        <tr>
+                                            <td colSpan={2} className="py-2 px-3 text-right">รวมสิ้น</td>
+                                            <td className="py-2 px-3 text-right">{linkedTransaction.totalCost?.toLocaleString()}</td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* Original PO Items (Always show for reference, or hide if user only wants one. I'll show details if pending, or condensed if completed) */}
+                        {!linkedTransaction && Object.entries(groupedItems).map(([source, items]) => (
                             <div key={source as string} className="bg-white p-4 rounded-lg shadow-sm border border-gray-200">
                                 <h2 className="font-bold text-lg text-green-700 border-b pb-2 mb-3">{source as string}</h2>
                                 <ul className="space-y-2">
@@ -473,7 +578,9 @@ export default function PODetailPage() {
             <div className="flex justify-between items-start mb-6 border-b pb-4 border-gray-300">
                 <div>
                     <h1 className="text-2xl font-bold mb-2">Farm Aroi</h1>
-                    <h2 className="text-xl font-semibold">ใบสั่งซื้อสินค้า (Purchase Order)</h2>
+                    <h2 className="text-xl font-semibold">
+                        {data?.status === 'completed' ? "ใบเสร็จฟาร์มอาร่อย (Receipt)" : "ใบสั่งซื้อสินค้า (Purchase Order)"}
+                    </h2>
                 </div>
                 <div className="text-right text-sm">
                     <p><span className="font-bold">วันที่:</span> {format(data?.date?.toDate ? data.date.toDate() : new Date(), "dd/MM/yyyy HH:mm")}</p>
@@ -486,16 +593,40 @@ export default function PODetailPage() {
             {/* A4 Table - 2 Columns */}
             <div className="flex gap-4 items-start">
                  {(() => {
-                        // Flatten items first
-                        let allItems: any[] = [];
-                        Object.entries(groupedItems).forEach(([source, items]: [string, any]) => {
-                            allItems = allItems.concat(items.map((i:any) => ({...i, source})));
-                        });
+                        // Determine items to print
+                        let printItems: any[] = [];
+                        let isReceipt = false;
+
+                        if (data.status === 'completed' && linkedTransaction) {
+                            // Completed: Use Actual Items
+                            isReceipt = true;
+                            // Attempt to map back source? linkedTransaction items usually don't have source.
+                            // We can assume 'General' or try to find it. 
+                            // For simplicity on Receipt, we can just list them.
+                            // Or we check `data.items` to find source.
+                            const sourceMap: Record<string, string> = {};
+                            data.items.forEach((i:any) => {
+                                sourceMap[i.productId] = i.source || i.productSource || 'General';
+                            });
+                            
+                            printItems = linkedTransaction.items.map((i:any) => ({
+                                ...i,
+                                toOrder: i.qty, // Display Qty
+                                source: sourceMap[i.productId] || 'General'
+                            }));
+
+                        } else {
+                            // Pending: Use Original Items
+                            isReceipt = false;
+                             Object.entries(groupedItems).forEach(([source, items]: [string, any]) => {
+                                printItems = printItems.concat(items.map((i:any) => ({...i, source})));
+                            });
+                        }
 
                         // Split into 2 columns
-                        const mid = Math.ceil(allItems.length / 2);
-                        const col1 = allItems.slice(0, mid);
-                        const col2 = allItems.slice(mid);
+                        const mid = Math.ceil(printItems.length / 2);
+                        const col1 = printItems.slice(0, mid);
+                        const col2 = printItems.slice(mid);
 
                         const RenderTable = ({ items, startIndex }: { items: any[], startIndex: number }) => (
                             <table className="w-1/2 border-collapse border border-gray-400 text-[10px]">
@@ -504,8 +635,7 @@ export default function PODetailPage() {
                                         <th className="border border-gray-400 px-1 py-1 text-center w-8">#</th>
                                         <th className="border border-gray-400 px-1 py-1 text-left">รายการ</th>
                                         <th className="border border-gray-400 px-1 py-1 text-center w-12">จำนวน</th>
-                                        <th className="border border-gray-400 px-1 py-1 text-center w-16">ราคา</th>
-                                        <th className="border border-gray-400 px-1 py-1 text-center w-20">ซื้อจาก</th>
+                                        <th className="border border-gray-400 px-1 py-1 text-center w-20">ราคา</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -514,18 +644,16 @@ export default function PODetailPage() {
                                             <td className="border border-gray-400 px-1 py-1 text-center">{startIndex + idx + 1}</td>
                                             <td className="border border-gray-400 px-1 py-1">
                                                 <span className="font-bold block text-[11px] leading-tight">{item.productName}</span>
-                                                <span className="text-[9px] text-gray-600 block leading-none">
-                                                   ({item.source})
-                                                </span>
                                             </td>
                                             <td className="border border-gray-400 px-1 py-1 text-center font-bold">
                                                 {item.toOrder} <span className="font-normal text-[9px]">{item.unit}</span>
                                             </td>
-                                            <td className="border border-gray-400 px-1 py-1"></td>
-                                            <td className="border border-gray-400 px-1 py-1"></td>
+                                            <td className="border border-gray-400 px-1 py-1 text-right">
+                                                {/* Show Price if Receipt */}
+                                                {isReceipt && item.price ? item.price.toLocaleString() : ""}
+                                            </td>
                                         </tr>
                                     ))}
-                                    {/* Fill empty rows to balance height if needed, or just leave as is */}
                                 </tbody>
                             </table>
                         );
@@ -538,6 +666,14 @@ export default function PODetailPage() {
                         );
                  })()}
             </div>
+
+            {/* A4 Grand Total Footer (Only if Completed) */}
+            {data.status === 'completed' && linkedTransaction && (
+                <div className="mt-4 text-right border-t border-gray-400 pt-2">
+                    <span className="font-bold text-lg mr-4">รวมสุทธิ (Grand Total):</span>
+                    <span className="font-bold text-xl">{linkedTransaction.totalCost?.toLocaleString() || 0} บาท</span>
+                </div>
+            )}
 
             <div className="mt-8 pt-8 border-t border-gray-300 flex justify-between">
                 <div className="w-1/3 text-center">
@@ -566,7 +702,7 @@ export default function PODetailPage() {
                   <div className="p-4 overflow-y-auto flex-1">
                       <div className="flex justify-between items-center mb-4">
                         <div className="text-sm text-gray-600 bg-blue-50 p-2 rounded border border-blue-100 flex-1 mr-4">
-                            ตรวจสอบและใส่ราคาต้นทุนต่อหน่วย
+                            ตรวจสอบ ป้อนจำนวนที่รับจริง และ จำนวนเงินรวม
                         </div>
                         <button 
                             onClick={() => {
@@ -589,16 +725,15 @@ export default function PODetailPage() {
                                 <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-20">มีอยู่</th>
                                 <th className="px-3 py-2 text-right text-xs font-medium text-gray-500 w-20">สั่ง</th>
                                 <th className="px-3 py-2 text-center text-xs font-medium text-blue-600 w-24">รับจริง</th>
-                                <th className="px-3 py-2 text-center text-xs font-medium text-orange-600 w-24">ทุน/หน่วย</th>
-                                <th className="px-3 py-2 text-right text-xs font-medium text-green-600 w-24">รวมเงิน</th>
+                                {/* Removed Unit Cost */}
+                                <th className="px-3 py-2 text-right text-xs font-medium text-green-600 w-32">จำนวนเงิน (บาท)</th>
                             </tr>
                         </thead>
                         <tbody className="divide-y divide-gray-200 bg-white">
                             {receiveItems.map((item, index) => {
                                 const current = item.currentStock || 0;
                                 const recQty = parseFloat(item.receiveQty) || 0;
-                                const cost = parseFloat(item.costPerUnit) || 0;
-                                const totalQty = current + recQty;
+                                const total = parseFloat(item.totalPrice) || 0;
                                 const toOrder = item.toOrder || 0;
                                 
                                 return (
@@ -622,17 +757,15 @@ export default function PODetailPage() {
                                                 onChange={(e) => handleReceiveItemChange(index, 'receiveQty', e.target.value)}
                                             />
                                         </td>
-                                        <td className="px-3 py-2 text-center">
+                                        {/* Removed Unit Cost TD */}
+                                        <td className="px-3 py-2 text-right">
                                             <input 
                                                 type="number"
-                                                className="w-20 text-right border border-gray-300 rounded px-1 py-1 text-sm focus:ring-orange-500 font-medium text-orange-700"
+                                                className="w-full text-right border border-gray-300 rounded px-1 py-1 text-sm focus:ring-green-500 font-bold text-green-700"
                                                 placeholder="0.00"
-                                                value={item.costPerUnit}
-                                                onChange={(e) => handleReceiveItemChange(index, 'costPerUnit', e.target.value)}
+                                                value={item.totalPrice}
+                                                onChange={(e) => handleReceiveItemChange(index, 'totalPrice', e.target.value)}
                                             />
-                                        </td>
-                                        <td className="px-3 py-2 text-right text-sm font-bold text-green-700">
-                                            {(recQty * cost).toLocaleString()}
                                         </td>
                                     </tr>
                                 );
