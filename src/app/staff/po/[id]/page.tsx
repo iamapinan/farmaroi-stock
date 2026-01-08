@@ -525,7 +525,7 @@ export default function PODetailPage() {
                              <div className="bg-white p-4 rounded-lg shadow-sm border border-green-200 bg-green-50 mb-4">
                                 <h2 className="font-bold text-lg text-green-800 mb-3 border-b border-green-200 pb-2">รายการที่ได้รับจริง (Stock In)</h2>
                                 <div className="overflow-x-auto">
-                                <table className="w-full text-sm text-left">
+                                <table className="w-full text-sm text-left text-gray-900">
                                     <thead className="bg-green-100 text-green-900 border-b border-green-200">
                                         <tr>
                                             <th className="py-2 px-3">สินค้า</th>
