@@ -693,20 +693,20 @@ function CheckContent() {
   <div className="h-20"></div> {/* Spacer */}
 
   <div className="fixed bottom-16 left-0 w-full bg-white border-t border-gray-200 shadow-xl shadow-top p-4 mb-2 flex justify-between items-center shadow-lg">
-      <div className="text-xl">
+      <div className="text-md">
           <span className="font-bold text-red-600">
             {items.filter(i => {
                 const current = parseFloat(i.currentStock) || 0;
                 return current < i.minStock;
             }).length}
-          </span> รายการที่ต้องสั่ง (ต่ำกว่าขั้นต่ำ)
+          </span> รายการต่ำกว่าขั้นต่ำ
       </div>
       <button 
         onClick={handleSubmit}
         disabled={submitting}
         className="bg-green-600 text-white font-bold py-2 px-6 w-1/2 rounded-full shadow-md hover:scale-105 transition-transform disabled:opacity-50 disabled:hover:scale-100"
       >
-         {submitting ? "กำลังบันทึก..." : "สรุปรายการสั่งซื้อ"}
+         {submitting ? "กำลังบันทึก..." : "สรุปรายการ"}
       </button>
   </div>
     </div>
