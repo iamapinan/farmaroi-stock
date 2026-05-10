@@ -24,6 +24,7 @@ interface StockItem {
   toOrder: number;
   amount: number;
   unit: string;
+  branchId?: string;
 }
 
 interface Transaction {
@@ -33,6 +34,7 @@ interface Transaction {
   items: any[];
   totalCost?: number;
   type?: string;
+  user?: string;
 }
 
 export default function ReportsPage() {
@@ -94,7 +96,7 @@ export default function ReportsPage() {
                     amount: data.amount,
                     unit: prod.unit,
                     ...data // includes branchId
-                } as any);
+                } as StockItem);
             }
         });
         setStocks(stockList);
@@ -120,7 +122,7 @@ export default function ReportsPage() {
 
   // Filter Logic
   const filteredStocks = stocks.filter(s => {
-      if (selectedBranch !== "All" && (s as any).branchId !== selectedBranch) return false;
+      if (selectedBranch !== "All" && s.branchId !== selectedBranch) return false;
       return true;
   });
 
@@ -136,17 +138,20 @@ export default function ReportsPage() {
 
     if (activeTab === 'balance') {
         // Headers
-        csvContent += "สินค้า,หมวดหมู่,สาขา,จำนวนคงเหลือ,หน่วย\n";
+        csvContent += "สินค้า,หมวดหมู่,สาขา,จำนวนคงเหลือ,หน่วย,แหล่งซื้อ,ขั้นต่ำ\n";
         
         // Rows
         filteredStocks.forEach(item => {
-            const branchName = (item as any).branchId ? branches.find(b => b.id === (item as any).branchId)?.name || '-' : '-';
+            const branchName = item.branchId ? branches.find(b => b.id === item.branchId)?.name || '-' : '-';
+            const prod = products.find(p => p.id === item.productId);
             const row = [
                 `"${item.productName.replace(/"/g, '""')}"`,
                 `"${item.category.replace(/"/g, '""')}"`,
                 `"${branchName.replace(/"/g, '""')}"`,
                 item.amount,
-                `"${item.unit.replace(/"/g, '""')}"`
+                `"${item.unit.replace(/"/g, '""')}"`,
+                `"${prod?.source?.replace(/"/g, '""') || '-'}"`,
+                prod?.minStock || 0
             ];
             csvContent += row.join(",") + "\n";
         });
@@ -167,7 +172,7 @@ export default function ReportsPage() {
                 `"${dateStr}"`,
                 `"${typeStr} - ${itemsStr.replace(/"/g, '""')}"`,
                 `"${branchName.replace(/"/g, '""')}"`,
-                `"${(t as any).user || 'Unknown'}"`,
+                `"${t.user || 'Unknown'}"`,
                 t.totalCost || 0
             ];
             csvContent += row.join(",") + "\n";
@@ -283,7 +288,7 @@ export default function ReportsPage() {
                                         <td className="py-3 px-4 font-medium text-gray-900 print:py-1 print:px-2 print:text-black">{item.productName}</td>
                                         <td className="py-3 px-4 text-gray-500 print:py-1 print:px-2 print:text-black">{item.category}</td>
                                         <td className="py-3 px-4 text-center text-gray-500 print:py-1 print:px-2 print:text-black">
-                                            {(item as any).branchId ? branches.find(b => b.id === (item as any).branchId)?.name : '-'}
+                                            {item.branchId ? branches.find(b => b.id === item.branchId)?.name : '-'}
                                         </td>
                                         <td className={`py-3 px-4 text-right font-bold print:py-1 print:px-2 print:text-black ${item.amount > 0 ? 'text-gray-900' : 'text-red-500'}`}>
                                             {item.amount.toLocaleString()}
@@ -336,7 +341,7 @@ export default function ReportsPage() {
                                             {branches.find(b => b.id === t.branchId)?.name || '-'}
                                         </td>
                                          <td className="py-3 px-4 text-center text-gray-500 text-xs print:py-1">
-                                            {(t as any).user || 'Unknown'}
+                                            {t.user || 'Unknown'}
                                         </td>
                                         <td className="py-3 px-4 text-right font-medium text-gray-900 print:py-1">
                                             {t.totalCost ? `฿${t.totalCost.toLocaleString()}` : '-'}

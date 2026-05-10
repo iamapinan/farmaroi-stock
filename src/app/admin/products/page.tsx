@@ -6,7 +6,7 @@ import AdminGuard from "@/components/auth/AdminGuard";
 import { useEffect, useState } from "react";
 import { collection, getDocs, addDoc, doc, updateDoc, deleteDoc } from "firebase/firestore";
 import { db } from "@/lib/firebase/config";
-import { Plus, Pencil, Trash, X, Search } from "lucide-react";
+import { Plus, Pencil, Trash, X, Search, Download } from "lucide-react";
 import { useMasterData } from "@/hooks/useMasterData";
 
 interface Product {
@@ -131,6 +131,39 @@ export default function ProductsPage() {
     }
   };
 
+  const handleExportCSV = () => {
+    if (filteredProducts.length === 0) {
+      alert("ไม่มีข้อมูลสำหรับส่งออก");
+      return;
+    }
+
+    let csvContent = "ชื่อสินค้า,หมวดหมู่,หน่วย,แหล่งซื้อ,ขั้นต่ำ,สถานะ\n";
+
+    filteredProducts.forEach(p => {
+      const status = p.disableStockCheck ? "Hidden" : "Active";
+      const row = [
+        `"${p.name.replace(/"/g, '""')}"`,
+        `"${p.category.replace(/"/g, '""')}"`,
+        `"${p.unit.replace(/"/g, '""')}"`,
+        `"${p.source.replace(/"/g, '""')}"`,
+        p.minStock || 0,
+        `"${status}"`
+      ];
+      csvContent += row.join(",") + "\n";
+    });
+
+    const BOM = "\uFEFF";
+    const blob = new Blob([BOM + csvContent], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.setAttribute("href", url);
+    link.setAttribute("download", `product_list_${new Date().toISOString().split('T')[0]}.csv`);
+    link.style.visibility = 'hidden';
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  };
+
   const filteredProducts = products.filter(p => {
     const matchesSearch = p.name.toLowerCase().includes(search.toLowerCase());
     const matchesCategory = filterCategory === "All" || p.category === filterCategory;
@@ -143,13 +176,22 @@ export default function ProductsPage() {
         <div className="space-y-6">
           <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
             <h1 className="text-2xl font-bold text-gray-900">จัดการสินค้า</h1>
-            <button
-              onClick={() => handleOpenModal()}
-              className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 flex items-center"
-            >
-              <Plus className="w-4 h-4 mr-2" />
-              เพิ่มสินค้า
-            </button>
+            <div className="flex gap-2">
+              <button
+                onClick={handleExportCSV}
+                className="border border-green-600 text-green-600 px-4 py-2 rounded-md hover:bg-green-50 flex items-center transition-colors"
+              >
+                <Download className="w-4 h-4 mr-2" />
+                Export CSV
+              </button>
+              <button
+                onClick={() => handleOpenModal()}
+                className="bg-green-600 text-white px-4 py-2 rounded-md hover:bg-green-700 flex items-center transition-colors"
+              >
+                <Plus className="w-4 h-4 mr-2" />
+                เพิ่มสินค้า
+              </button>
+            </div>
           </div>
 
           {/* Search and Filter */}
