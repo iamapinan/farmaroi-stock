@@ -1,18 +1,81 @@
-[debug] [2026-05-10T04:43:51.355Z] ----------------------------------------------------------------------
-[debug] [2026-05-10T04:43:51.356Z] Command:       /opt/homebrew/Cellar/node/23.6.1/bin/node /opt/homebrew/bin/firebase login
-[debug] [2026-05-10T04:43:51.357Z] CLI Version:   14.18.0
-[debug] [2026-05-10T04:43:51.357Z] Platform:      darwin
-[debug] [2026-05-10T04:43:51.357Z] Node Version:  v23.6.1
-[debug] [2026-05-10T04:43:51.357Z] Time:          Sun May 10 2026 11:43:51 GMT+0700 (Indochina Time)
-[debug] [2026-05-10T04:43:51.357Z] ----------------------------------------------------------------------
+[debug] [2026-05-10T04:45:10.943Z] ----------------------------------------------------------------------
+[debug] [2026-05-10T04:45:10.944Z] Command:       /opt/homebrew/Cellar/node/23.6.1/bin/node /opt/homebrew/bin/firebase deploy
+[debug] [2026-05-10T04:45:10.944Z] CLI Version:   14.18.0
+[debug] [2026-05-10T04:45:10.944Z] Platform:      darwin
+[debug] [2026-05-10T04:45:10.944Z] Node Version:  v23.6.1
+[debug] [2026-05-10T04:45:10.945Z] Time:          Sun May 10 2026 11:45:10 GMT+0700 (Indochina Time)
+[debug] [2026-05-10T04:45:10.945Z] ----------------------------------------------------------------------
 [debug] 
-[info] i  The Firebase CLI’s MCP server feature can optionally make use of Gemini in Firebase. Learn more about Gemini in Firebase and how it uses your data: https://firebase.google.com/docs/gemini-in-firebase#how-gemini-in-firebase-uses-your-data 
+[debug] [2026-05-10T04:45:11.019Z] > command requires scopes: ["email","openid","https://www.googleapis.com/auth/cloudplatformprojects.readonly","https://www.googleapis.com/auth/firebase","https://www.googleapis.com/auth/cloud-platform"]
+[debug] [2026-05-10T04:45:11.020Z] > authorizing via signed-in user (iamapinan@gmail.com)
+[debug] [2026-05-10T04:45:11.020Z] [iam] checking project farm-aroi-stock-db for permissions ["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]
+[debug] [2026-05-10T04:45:11.020Z] Checked if tokens are valid: true, expires at: 1778391856659
+[debug] [2026-05-10T04:45:11.020Z] Checked if tokens are valid: true, expires at: 1778391856659
+[debug] [2026-05-10T04:45:11.020Z] >>> [apiv2][query] POST https://cloudresourcemanager.googleapis.com/v1/projects/farm-aroi-stock-db:testIamPermissions [none]
+[debug] [2026-05-10T04:45:11.021Z] >>> [apiv2][(partial)header] POST https://cloudresourcemanager.googleapis.com/v1/projects/farm-aroi-stock-db:testIamPermissions x-goog-quota-user=projects/farm-aroi-stock-db
+[debug] [2026-05-10T04:45:11.021Z] >>> [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/farm-aroi-stock-db:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
+[debug] [2026-05-10T04:45:12.293Z] <<< [apiv2][status] POST https://cloudresourcemanager.googleapis.com/v1/projects/farm-aroi-stock-db:testIamPermissions 200
+[debug] [2026-05-10T04:45:12.293Z] <<< [apiv2][body] POST https://cloudresourcemanager.googleapis.com/v1/projects/farm-aroi-stock-db:testIamPermissions {"permissions":["datastore.indexes.create","datastore.indexes.delete","datastore.indexes.list","datastore.indexes.update","firebase.projects.get"]}
 [info] 
-[info] i  Firebase optionally collects CLI and Emulator Suite usage and error reporting information to help improve our products. Data is collected in accordance with Google's privacy policy (https://policies.google.com/privacy) and is not used to identify you. 
+[info] === Deploying to 'farm-aroi-stock-db'...
 [info] 
-[info] i  To change your preferences at any time, run `firebase logout` and `firebase login` again. 
-[info] 
-[info] Visit this URL on this device to log in:
-[info] https://accounts.google.com/o/oauth2/auth?client_id=563584335869-fgrhgmd47bqnekij5i8b5pr03ho849e6.apps.googleusercontent.com&scope=email%20openid%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloudplatformprojects.readonly%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Ffirebase%20https%3A%2F%2Fwww.googleapis.com%2Fauth%2Fcloud-platform&response_type=code&state=1025419140&redirect_uri=http%3A%2F%2Flocalhost%3A9005
-[info] 
-[info] Waiting for authentication...
+[info] i  deploying firestore 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[info] i  firestore: ensuring required API firestore.googleapis.com is enabled... 
+[debug] [2026-05-10T04:45:12.295Z] Checked if tokens are valid: true, expires at: 1778391856659
+[debug] [2026-05-10T04:45:12.295Z] Checked if tokens are valid: true, expires at: 1778391856659
+[debug] [2026-05-10T04:45:12.295Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/farm-aroi-stock-db/databases/(default) [none]
+[debug] [2026-05-10T04:45:12.613Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/farm-aroi-stock-db/databases/(default) 200
+[debug] [2026-05-10T04:45:12.614Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/farm-aroi-stock-db/databases/(default) {"name":"projects/farm-aroi-stock-db/databases/(default)","uid":"cf5d066e-5629-4187-a1f6-9817227df5a9","createTime":"2026-01-03T16:33:45.477770Z","updateTime":"2026-01-03T16:33:45.477770Z","locationId":"asia-southeast1","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2026-05-10T03:45:12.805763Z","appEngineIntegrationMode":"DISABLED","keyPrefix":"zas","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","freeTier":true,"realtimeUpdatesMode":"REALTIME_UPDATES_MODE_ENABLED","etag":"IP6bod30rZQDMJT4mt+P5JID"}
+[info] i  firestore: reading indexes from firestore.indexes.json... 
+[info] i  cloud.firestore: checking firestore.rules for compilation errors... 
+[debug] [2026-05-10T04:45:12.617Z] Checked if tokens are valid: true, expires at: 1778391856659
+[debug] [2026-05-10T04:45:12.617Z] Checked if tokens are valid: true, expires at: 1778391856659
+[debug] [2026-05-10T04:45:12.617Z] >>> [apiv2][query] POST https://firebaserules.googleapis.com/v1/projects/farm-aroi-stock-db:test [none]
+[debug] [2026-05-10T04:45:12.617Z] >>> [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/farm-aroi-stock-db:test [omitted]
+[debug] [2026-05-10T04:45:14.197Z] <<< [apiv2][status] POST https://firebaserules.googleapis.com/v1/projects/farm-aroi-stock-db:test 200
+[debug] [2026-05-10T04:45:14.197Z] <<< [apiv2][body] POST https://firebaserules.googleapis.com/v1/projects/farm-aroi-stock-db:test {}
+[info] ✔  cloud.firestore: rules file firestore.rules compiled successfully 
+[debug] [2026-05-10T04:45:14.199Z] Checked if tokens are valid: true, expires at: 1778391856659
+[debug] [2026-05-10T04:45:14.199Z] Checked if tokens are valid: true, expires at: 1778391856659
+[debug] [2026-05-10T04:45:14.199Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/farm-aroi-stock-db/releases pageSize=10&pageToken=
+[debug] [2026-05-10T04:45:15.574Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/farm-aroi-stock-db/releases 200
+[debug] [2026-05-10T04:45:15.574Z] <<< [apiv2][body] GET https://firebaserules.googleapis.com/v1/projects/farm-aroi-stock-db/releases {"releases":[{"name":"projects/farm-aroi-stock-db/releases/cloud.firestore","rulesetName":"projects/farm-aroi-stock-db/rulesets/7825ed9d-3421-4fc4-afe1-00871d73f395","createTime":"2026-01-03T16:33:53.363221Z","updateTime":"2026-02-05T15:42:40.167971Z"}]}
+[debug] [2026-05-10T04:45:15.574Z] Checked if tokens are valid: true, expires at: 1778391856659
+[debug] [2026-05-10T04:45:15.575Z] Checked if tokens are valid: true, expires at: 1778391856659
+[debug] [2026-05-10T04:45:15.575Z] >>> [apiv2][query] GET https://firebaserules.googleapis.com/v1/projects/farm-aroi-stock-db/rulesets/7825ed9d-3421-4fc4-afe1-00871d73f395 [none]
+[debug] [2026-05-10T04:45:16.880Z] <<< [apiv2][status] GET https://firebaserules.googleapis.com/v1/projects/farm-aroi-stock-db/rulesets/7825ed9d-3421-4fc4-afe1-00871d73f395 200
+[debug] [2026-05-10T04:45:16.880Z] <<< [apiv2][body] GET https://firebaserules.googleapis.com/v1/projects/farm-aroi-stock-db/rulesets/7825ed9d-3421-4fc4-afe1-00871d73f395 [omitted]
+[info] i  firestore: latest version of firestore.rules already up to date, skipping upload... 
+[info] i  firestore: deploying indexes... 
+[debug] [2026-05-10T04:45:16.882Z] Checked if tokens are valid: true, expires at: 1778391856659
+[debug] [2026-05-10T04:45:16.882Z] Checked if tokens are valid: true, expires at: 1778391856659
+[debug] [2026-05-10T04:45:16.883Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/farm-aroi-stock-db/databases/(default)/collectionGroups/-/indexes [none]
+[debug] [2026-05-10T04:45:17.008Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/farm-aroi-stock-db/databases/(default)/collectionGroups/-/indexes 200
+[debug] [2026-05-10T04:45:17.009Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/farm-aroi-stock-db/databases/(default)/collectionGroups/-/indexes {"indexes":[{"name":"projects/farm-aroi-stock-db/databases/(default)/collectionGroups/daily_checks/indexes/CICAgOjXh4EK","queryScope":"COLLECTION","fields":[{"fieldPath":"branchId","order":"ASCENDING"},{"fieldPath":"date","order":"DESCENDING"},{"fieldPath":"__name__","order":"DESCENDING"}],"state":"READY","density":"SPARSE_ALL"},{"name":"projects/farm-aroi-stock-db/databases/(default)/collectionGroups/daily_checks/indexes/CICAgJiUpoMK","queryScope":"COLLECTION","fields":[{"fieldPath":"branchId","order":"ASCENDING"},{"fieldPath":"date","order":"ASCENDING"},{"fieldPath":"__name__","order":"ASCENDING"}],"state":"READY","density":"SPARSE_ALL"}]}
+[debug] [2026-05-10T04:45:17.009Z] Checked if tokens are valid: true, expires at: 1778391856659
+[debug] [2026-05-10T04:45:17.009Z] Checked if tokens are valid: true, expires at: 1778391856659
+[debug] [2026-05-10T04:45:17.009Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/farm-aroi-stock-db/databases/(default)/collectionGroups/-/fields?filter=indexConfig.usesAncestorConfig=false OR ttlConfig:* [none]
+[debug] [2026-05-10T04:45:17.132Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/farm-aroi-stock-db/databases/(default)/collectionGroups/-/fields?filter=indexConfig.usesAncestorConfig=false OR ttlConfig:* 200
+[debug] [2026-05-10T04:45:17.132Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/farm-aroi-stock-db/databases/(default)/collectionGroups/-/fields?filter=indexConfig.usesAncestorConfig=false OR ttlConfig:* {"fields":[{"name":"projects/farm-aroi-stock-db/databases/(default)/collectionGroups/__default__/fields/*","indexConfig":{"indexes":[{"queryScope":"COLLECTION","fields":[{"fieldPath":"*","order":"ASCENDING"}],"state":"READY"},{"queryScope":"COLLECTION","fields":[{"fieldPath":"*","order":"DESCENDING"}],"state":"READY"},{"queryScope":"COLLECTION","fields":[{"fieldPath":"*","arrayConfig":"CONTAINS"}],"state":"READY"}]}}]}
+[debug] [2026-05-10T04:45:17.132Z] Checked if tokens are valid: true, expires at: 1778391856659
+[debug] [2026-05-10T04:45:17.132Z] Checked if tokens are valid: true, expires at: 1778391856659
+[debug] [2026-05-10T04:45:17.132Z] >>> [apiv2][query] GET https://firestore.googleapis.com/v1/projects/farm-aroi-stock-db/databases/(default) [none]
+[debug] [2026-05-10T04:45:17.234Z] <<< [apiv2][status] GET https://firestore.googleapis.com/v1/projects/farm-aroi-stock-db/databases/(default) 200
+[debug] [2026-05-10T04:45:17.234Z] <<< [apiv2][body] GET https://firestore.googleapis.com/v1/projects/farm-aroi-stock-db/databases/(default) {"name":"projects/farm-aroi-stock-db/databases/(default)","uid":"cf5d066e-5629-4187-a1f6-9817227df5a9","createTime":"2026-01-03T16:33:45.477770Z","updateTime":"2026-01-03T16:33:45.477770Z","locationId":"asia-southeast1","type":"FIRESTORE_NATIVE","concurrencyMode":"PESSIMISTIC","versionRetentionPeriod":"3600s","earliestVersionTime":"2026-05-10T03:45:17.429165Z","appEngineIntegrationMode":"DISABLED","keyPrefix":"zas","pointInTimeRecoveryEnablement":"POINT_IN_TIME_RECOVERY_DISABLED","deleteProtectionState":"DELETE_PROTECTION_DISABLED","databaseEdition":"STANDARD","freeTier":true,"realtimeUpdatesMode":"REALTIME_UPDATES_MODE_ENABLED","etag":"IMazu9/0rZQDMJT4mt+P5JID"}
+[info] i  firestore: The following indexes are defined in your project but are not present in your firestore indexes file:
+	(daily_checks) -- (branchId,ASCENDING) (date,DESCENDING)  -- Density:SPARSE_ALL 
+	(daily_checks) -- (branchId,ASCENDING) (date,ASCENDING)  -- Density:SPARSE_ALL  
+[debug] [2026-05-10T04:45:46.105Z] ExitPromptError: User force closed the prompt with SIGINT
+    at Interface.sigint (/opt/homebrew/lib/node_modules/firebase-tools/node_modules/@inquirer/core/dist/commonjs/lib/create-prompt.js:101:37)
+    at Interface.emit (node:events:507:28)
+    at Interface.emit (node:domain:489:12)
+    at [_ttyWrite] [as _ttyWrite] (node:internal/readline/interface:1125:18)
+    at ReadStream.onkeypress (node:internal/readline/interface:264:20)
+    at ReadStream.emit (node:events:519:35)
+    at ReadStream.emit (node:domain:489:12)
+    at emitKeys (node:internal/readline/utils:370:14)
+    at emitKeys.next (<anonymous>)
+    at ReadStream.onData (node:internal/readline/emitKeypressEvents:64:36)
+[error] 
+[error] Error: An unexpected error has occurred.
